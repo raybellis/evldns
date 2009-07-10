@@ -1,0 +1,107 @@
+ABOUT
+-----
+
+evldns is a library and framework designed to ease the creation of
+small and fast DNS servers, especially where the responses from those
+servers are dynamically synthesised.
+
+It is a mashup of libevent and ldns.  Specifically it's derived from
+the server-side half of libevent's "evdns" module re-written to use
+the ldns package handling APIs.
+
+APIs
+----
+
+evldns works using callback functions.  A list of packet matching patterns
+may be registered, along with a pointer to the function that will be
+invoked when each pattern is matched.
+
+The packet match works on the usual DNS triple of (QNAME, QCLASS, QTYPE)
+where QNAME may be an exact match or a wildcard, and QCLASS or QTYPE may
+be "ANY".
+
+The callback function is passed two parameters:
+
+  void callback(struct evldns_server_request *req, void *data)
+
+The "req" parameter contains the complete received DNS request as an
+"ldns_pkt".  The callback should create a response packet and populate
+"req" with that response, which may either be in raw wire format
+(req->wire_response and req->wire_len) or in ldns format (req->response).
+
+If the callback function fails to populate either of the response fields
+then the evldns system will pass the received packet onto the next
+matching callback.
+
+Should no callback match then evldns will automatically generate and
+return a packet with RCODE = 5 (Refused).
+
+The "data" parameter is used to pass an additional parameter supplied when
+the callback function was registered.  See "mod_version.c" for an example
+of how "data" may be used to pass expected response data into a callback.
+
+A complete evldns application requires just a few extra lines of code:
+
+  event_init();				/* initialise libevent */
+  evldns_init();			/* initialise evldns */
+  int s = bind_to_udp4_port(53);	/* bind a UDP socket */
+
+  /* register the socket with evldns */
+  struct evldns_server_port *p = evldns_add_server_port(s);
+
+  /* register callbacks here */
+  evldns_add_callback(p, qname, qclass, qtype, callback, data);
+  ...
+
+  /* and set libevent running */
+  event_dispatch();
+
+and that's it!
+
+DEMOS
+-----
+
+- as112d
+
+This application shows how evldns may be used to construct an extremely
+fast and lightweight server for negative responses for RFC 1918 IP addresses,
+as implemented by the AS112 anycast cloud.
+
+On a single core of an HP DL385 2.0 GHz Opteron server this application has
+been benchmarked at over 60,000 queries per second.
+
+- chaos
+
+Demonstrates use of plugin modules and callback data to handle queries
+for BIND-style "version.bind CH TXT" and "author.bind CH TXT".
+
+PLUGINS
+-------
+
+evldns supports two plugin models - one for dynamic (shared library) modules
+and another for run-time binding to callback functions.
+
+However the implementation of these is subject to change.
+
+LICENSING
+---------
+
+This code is open source with a BSD license.
+
+Please see "COPYING" for the full license details.
+
+TODO
+----
+
+- Support for TCP/IP
+
+  TCP sockets must listen() and accept() before they can exchange data.
+  This will require additional libevent callbacks to handle those socket
+  level events, and only then can the data read/write callbacks be processed.
+
+- Make callbacks global rather than per-port (optionally?)
+
+  Currently serving via more than one socket requires the callback chain to
+  be registered once for each socket because the callback chain is part of
+  the 'evldns_server_port' structure.  This also breaks the module loading
+  model.
