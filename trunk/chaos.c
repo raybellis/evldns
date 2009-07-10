@@ -26,6 +26,7 @@ int main(int argc, char *argv[])
 {
 	int				 s;
 	struct evldns_server_port	*p;
+	evldns_callback			 myip;
 
 	event_init();
 	evldns_init();
@@ -34,9 +35,12 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
+	evldns_load_plugin(p, ".libs/mod_myip.so");
+	myip = evldns_get_function("myip");
+
 	p = evldns_add_server_port(s);
 	evldns_add_callback(p, NULL, LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, query_only, NULL);
-	evldns_load_plugin(p, ".libs/mod_mangler.so");
+	evldns_add_callback(p, "client.bind", LDNS_RR_CLASS_IN, LDNS_RR_TYPE_A, myip, NULL);
 	evldns_load_plugin(p, ".libs/mod_version.so");
 	evldns_add_callback(p, "*", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, nxdomain, NULL);
 	event_dispatch();
