@@ -19,6 +19,7 @@ static void myip_callback(evldns_server_request *srq, void *user_data)
 			struct sockaddr_in *p = (struct sockaddr_in *)&srq->addr;
 			txt = inet_ntoa(p->sin_addr);
 		} else if (srq->addr.ss_family == AF_INET6) {
+			/* TODO */
 		}
 
 		if (txt) {
@@ -37,6 +38,7 @@ static void myip_callback(evldns_server_request *srq, void *user_data)
 		ldns_rdf *rdf = ldns_rdf_new_frm_data(LDNS_RDF_TYPE_A, 4,
 				&p->sin_addr.s_addr);
 		ldns_rr_push_rdf(rr, rdf);
+		ldns_rr_set_type(rr, LDNS_RR_TYPE_A);
 		ldns_rr_set_ttl(rr, 0L);
 		ldns_rr_list_push_rr(answer, rr);
 	}
