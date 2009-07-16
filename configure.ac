@@ -64,6 +64,7 @@ AC_TYPE_SIZE_T
 #AC_TYPE_UINT8_T
 
 # Checks for library functions.
+AC_SEARCH_LIBS([dlopen], [dl])
 AC_CHECK_FUNCS([socket memset strdup])
 AC_SUBST(AM_CPPFLAGS)
 AC_SUBST(AM_CFLAGS)
