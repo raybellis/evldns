@@ -26,23 +26,33 @@ int main(int argc, char *argv[])
 {
 	int				 s;
 	struct evldns_server_port	*p;
-	evldns_callback			 myip;
+	evldns_callback			 myip, txt;
 
 	event_init();
 	evldns_init();
 
+	/* create a socket and pass it to evldns */
 	if ((s = bind_to_udp4_port(5053)) < 0) {
 		return EXIT_FAILURE;
 	}
-
-	evldns_load_plugin(p, ".libs/mod_myip.so");
-	myip = evldns_get_function("myip");
-
 	p = evldns_add_server_port(s);
+
+	/* load a couple of plugins */
+	evldns_load_plugin(p, ".libs/mod_myip.so");
+	evldns_load_plugin(p, ".libs/mod_txtrec.so");
+
+	/* get plugin defined functions */
+	myip = evldns_get_function("myip");
+	txt = evldns_get_function("txt");
+
+	/* register a list of callbacks */
 	evldns_add_callback(p, NULL, LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, query_only, NULL);
 	evldns_add_callback(p, "client.bind", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, myip, NULL);
-	evldns_load_plugin(p, ".libs/mod_version.so");
+	evldns_add_callback(p, "version.bind", LDNS_RR_CLASS_CH, LDNS_RR_TYPE_TXT, txt, "evldns-0.1");
+	evldns_add_callback(p, "author.bind", LDNS_RR_CLASS_CH, LDNS_RR_TYPE_TXT, txt, "Ray Bellis, Advanced Projects, Nominet UK");
 	evldns_add_callback(p, "*", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, nxdomain, NULL);
+
+	/* and set it running */
 	event_dispatch();
 
 	return EXIT_SUCCESS;

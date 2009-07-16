@@ -16,17 +16,9 @@ static void txt_callback(evldns_server_request *srq, void *user_data)
 	srq->response = resp;
 }
 
-static void add_txt_record(struct evldns_server_port *p, const char *label, void *value)
-{
-	evldns_add_callback(p, label, LDNS_RR_CLASS_CH, LDNS_RR_TYPE_TXT, txt_callback, value);
-}
-
 int init(struct evldns_server_port *p)
 {
-	evldns_add_function("txt_callback", txt_callback);
-
-	add_txt_record(p, "version.bind", "evldns-0.1");
-	add_txt_record(p, "author.bind",  "Ray Bellis");
+	evldns_add_function("txt", txt_callback);
 
 	return 0;
 }

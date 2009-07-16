@@ -7,10 +7,10 @@ chaos_LDFLAGS	= -rdynamic -levldns -levent -lldns
 as112d_SOURCES	= as112d.c
 as112d_LDFLAGS	= -rdynamic -levldns -levent -lldns
 
-lib_LTLIBRARIES	= libevldns.la mod_mangler.la mod_version.la mod_myip.la
+lib_LTLIBRARIES	= libevldns.la mod_mangler.la mod_txtrec.la mod_myip.la
 
 libevldns_la_SOURCES	= evldns.c plugin.c function.c network.c
 
 mod_mangler_la_LDFLAGS = -module
-mod_version_la_LDFLAGS = -module
+mod_txtrec_la_LDFLAGS = -module
 mod_myip_la_LDFLAGS = -module
