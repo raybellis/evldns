@@ -2,7 +2,19 @@
 #include <arpa/inet.h>
 #include <evldns.h>
 
-/* TXT record lookup in - result is in user_data */
+/*
+ * this callback function returns the IP(v4) address of
+ * the DNS client that sent the request
+ *
+ * If the question is "qname IN TXT" or "qname CH TXT"
+ * then a TXT record containing the address is returned.
+ *
+ * If the question is "qname IN A" then an A record is
+ * returned instead.
+ *
+ * If the question is "qname IN ANY" then both the TXT
+ * and A records are returned.
+ */
 static void myip_callback(evldns_server_request *srq, void *user_data)
 {
 	ldns_pkt *req = srq->request;
@@ -19,7 +31,7 @@ static void myip_callback(evldns_server_request *srq, void *user_data)
 			struct sockaddr_in *p = (struct sockaddr_in *)&srq->addr;
 			txt = inet_ntoa(p->sin_addr);
 		} else if (srq->addr.ss_family == AF_INET6) {
-			/* TODO */
+			/* TODO - IPv6 AAAA records */
 		}
 
 		if (txt) {
