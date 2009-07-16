@@ -1,6 +1,10 @@
 #include <evldns.h>
 
-/* TXT record lookup in - result is in user_data */
+/*
+ * This callback functions just returns a TXT record containing
+ * whatever string value was passed in the 'user_data' parameter
+ * when the callback was added.
+ */
 static void txt_callback(evldns_server_request *srq, void *user_data)
 {
 	ldns_pkt *req = srq->request;

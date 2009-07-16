@@ -1,6 +1,17 @@
 #include <stdlib.h>
 #include <evldns.h>
 
+/*
+ * This function is not actually a callback, although it has
+ * the same parameter signature as a callback
+ *
+ * Given an 'evldns_server_request' that has _already_ been
+ * populated, it randomly flips bits in the output buffer
+ * based on the value supplied in 'user_data'
+ *
+ * NB: user_data should be passed directly as an integer,
+ * not as a pointer to an integer
+ */
 static void bitflip(evldns_server_request *srq, void *user_data)
 {
 	int		n_bits = (int)(long)user_data;
