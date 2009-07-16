@@ -32,7 +32,9 @@ static void bitflip(evldns_server_request *srq, void *user_data)
 	}
 }
 
-void init(void *p)
+int init(struct evldns_server_port *p)
 {
 	evldns_add_function("bitflip", bitflip);
+
+	return 0;
 }

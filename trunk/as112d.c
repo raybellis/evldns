@@ -16,6 +16,10 @@ typedef struct as112_zone {
 
 as112_zone zones[19];
 
+/*
+ * following two functions pre-create a set of standard RRs
+ * (SOA and NS) for each of the recognised zones
+ */
 void create_zone(const char *origin, as112_zone *zone)
 {
 	zone->origin = ldns_dname_new_frm_str(origin);
@@ -48,6 +52,12 @@ void create_zones()
 	create_zone("31.172.in-addr.arpa", p++);
 }
 
+/*
+ * given an query, strips it to the relevant portion of the
+ * in-addr.arpa namespace and uses hard-coded logic to figure
+ * out which of the pre-created elements of the 'zones' array
+ * contains the RRs for it
+ */
 as112_zone *search_zones(ldns_rdf *qname, int *count)
 {
 	int n = 0, slash8;
@@ -69,12 +79,13 @@ as112_zone *search_zones(ldns_rdf *qname, int *count)
 			if (!isdigit(c1) || c2 != '\0') return NULL;
 			if (n == 2) {
 				slash8 = octet;
-				if (slash8 == 10) {
+				if (slash8 == 10) { /* shortcut here for 10.0.0.0/8 */
 					return &zones[0];
 				}
 			}
 		}
 
+		/* if it wasn't 10.0.0.0/8 then check at the /16 boundary */
 		if (n == 3) {
 			if (slash8 == 169 && octet == 254) {
 				return &zones[1];

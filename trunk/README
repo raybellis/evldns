@@ -75,13 +75,16 @@ been benchmarked at over 60,000 queries per second.
 Demonstrates use of plugin modules and callback data to handle queries
 for BIND-style "version.bind CH TXT" and "author.bind CH TXT".
 
+It also includes support for "client.bind CH TXT" and "client.bind IN A/TXT"
+which returns the IP(v4) address of the host from which it received the query.
+
 PLUGINS
 -------
 
-evldns supports two plugin models - one for dynamic (shared library) modules
-and another for run-time binding to callback functions.
+evldns supports dynamic (shared) modules, and run-time binding to named
+callback functions.
 
-However the implementation of these is subject to change.
+However the implementation of these is quite likely to change.
 
 LICENSING
 ---------
