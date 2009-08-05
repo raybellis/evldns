@@ -26,7 +26,6 @@ static void myip_callback(evldns_server_request *srq, void *user_data)
 
 	if (qtype == LDNS_RR_TYPE_TXT || qtype == LDNS_RR_TYPE_ANY) {
 		char *txt = NULL;
-		ldns_rr *rr = NULL;
 		if (srq->addr.ss_family == AF_INET) {
 			struct sockaddr_in *p = (struct sockaddr_in *)&srq->addr;
 			txt = inet_ntoa(p->sin_addr);
@@ -59,7 +58,7 @@ static void myip_callback(evldns_server_request *srq, void *user_data)
 	srq->response = resp;
 }
 
-int init(struct evldns_server_port *p)
+int init(struct evldns_server *p)
 {
 	evldns_add_function("myip", myip_callback);
 
