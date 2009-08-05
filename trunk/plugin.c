@@ -1,7 +1,7 @@
 #include <dlfcn.h>
 #include <evldns.h>
 
-int evldns_load_plugin(struct evldns_server_port *p, const char *plugin)
+int evldns_load_plugin(struct evldns_server *server, const char *plugin)
 {
 	char *err;
 	dlerror();
@@ -17,5 +17,5 @@ int evldns_load_plugin(struct evldns_server_port *p, const char *plugin)
 		return -1;
 	}
 
-	return init(p);
+	return init(server);
 }

@@ -20,7 +20,7 @@ static void txt_callback(evldns_server_request *srq, void *user_data)
 	srq->response = resp;
 }
 
-int init(struct evldns_server_port *p)
+int init(struct evldns_server *p)
 {
 	evldns_add_function("txt", txt_callback);
 

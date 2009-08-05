@@ -4,12 +4,19 @@
 
 #include <evldns.h>
 
+struct evldns_server {
+	TAILQ_HEAD(evldnsfdq, evldns_server_port) ports;
+	TAILQ_HEAD(evldnscbq, evldns_cb) callbacks;
+};
+typedef struct evldns_server evldns_server;
+
 struct evldns_server_port {
+	TAILQ_ENTRY(evldns_server_port)	 next;
+	evldns_server			*server;
 	int				 socket;
 	int				 refcnt;
 	char				 choked;
 	char				 closing;
-	TAILQ_HEAD(evldnscbq, evldns_cb) callbacks;
 	struct event			 event;
 	struct evldns_server_request	*pending_replies;
 };
@@ -35,19 +42,34 @@ static int server_request_free(evldns_server_request *req);
 static void dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req);
 
 /* exported function */
-struct evldns_server_port *
-evldns_add_server_port(int socket)
+struct evldns_server *evldns_add_server()
 {
-	evldns_server_port *port;
-	if (!(port = malloc(sizeof(evldns_server_port)))) {
+	evldns_server *server;
+	if (!(server = malloc(sizeof(*server)))) {
 		return NULL;
 	}
-	memset(port, 0, sizeof(evldns_server_port));
+	memset(server, 0, sizeof(*server));
 
+	TAILQ_INIT(&server->ports);
+	TAILQ_INIT(&server->callbacks);
+
+	return server;
+}
+
+struct evldns_server_port *
+evldns_add_server_port(struct evldns_server *server, int socket)
+{
+	evldns_server_port *port;
+	if (!(port = malloc(sizeof(*port)))) {
+		return NULL;
+	}
+	memset(port, 0, sizeof(*port));
+
+	port->server = server;
 	port->socket = socket;
 	port->refcnt = 1;
 	port->closing = 0;
-	TAILQ_INIT(&port->callbacks);
+	TAILQ_INSERT_TAIL(&server->ports, port, next);
 
 	event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
 		server_port_ready_callback, port);
@@ -148,7 +170,7 @@ handle_packet(uint8_t *buffer, size_t buflen, evldns_server_port *port, struct s
 		return -1;
 	}
 
-	dispatch_callbacks(&port->callbacks, req);
+	dispatch_callbacks(&port->server->callbacks, req);
 
 	evldns_server_request_respond(req);
 
@@ -282,7 +304,7 @@ server_request_free(evldns_server_request *req)
 	return 0;
 }
 
-void evldns_add_callback(evldns_server_port *port, const char *dname, ldns_rr_class rr_class, ldns_rr_type rr_type, evldns_callback callback, void *data)
+void evldns_add_callback(evldns_server *server, const char *dname, ldns_rr_class rr_class, ldns_rr_type rr_type, evldns_callback callback, void *data)
 {
 	evldns_cb *cb = (evldns_cb *)malloc(sizeof(evldns_cb));
 	// TODO: error check
@@ -295,7 +317,7 @@ void evldns_add_callback(evldns_server_port *port, const char *dname, ldns_rr_cl
 	cb->rr_type = rr_type;
 	cb->callback = callback;
 	cb->data = data;
-	TAILQ_INSERT_TAIL(&port->callbacks, cb, next);
+	TAILQ_INSERT_TAIL(&server->callbacks, cb, next);
 }
 
 static void

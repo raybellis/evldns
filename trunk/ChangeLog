@@ -1,1 +1,5 @@
-This file deliberately left blank
+Changelog: $Id$
+
+2009/08/05 - split out separate server contexts each of which
+	     can handle multiple sockets with the same callback
+	     list

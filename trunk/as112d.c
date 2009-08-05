@@ -60,10 +60,10 @@ void create_zones()
  */
 as112_zone *search_zones(ldns_rdf *qname, int *count)
 {
-	int n = 0, slash8;
+	int n = 0, slash8 = -1;
 	*count = ldns_dname_label_count(qname);
 	while (*count > 0 && n < 4) {
-		int octet;
+		int octet = -1;
 
 		(*count)--;
 		if (n < 2) {
@@ -71,7 +71,8 @@ as112_zone *search_zones(ldns_rdf *qname, int *count)
 		} else {
 			/* attempt to parse the numeric labels */
 			ldns_rdf *label = ldns_dname_label(qname, *count);
-			char *ptr, *data = ldns_rdf_data(label);
+			char *ptr;
+			char *data = (char *)ldns_rdf_data(label);
 			char *str = data + 1, c1 = *str, c2;
 			octet = strtol(str, &ptr, 10);
 			c2 = *ptr;
@@ -127,7 +128,6 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 
 	/* misc local variables */
 	ldns_rr_list *answer = ldns_pkt_answer(resp);
-	ldns_rr *soa, *ns1, *ns2;
 	int lcount;
 
 	/* figure out what zone we're handling */
@@ -165,7 +165,7 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 int main(int argc, char *argv[])
 {
 	int				 s;
-	struct evldns_server_port	*p;
+	struct evldns_server		*p;
 
 	if ((s = bind_to_udp4_port(5053)) < 0) {
 		return EXIT_FAILURE;
@@ -173,7 +173,8 @@ int main(int argc, char *argv[])
 
 	create_zones();
 	event_init();
-	p = evldns_add_server_port(s);
+	p = evldns_add_server();
+	evldns_add_server_port(p, s);
 	evldns_add_callback(p, NULL, LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, query_only, NULL);
 	evldns_add_callback(p, "*.in-addr.arpa.", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, as112_callback, NULL);
 	event_dispatch();

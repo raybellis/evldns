@@ -44,13 +44,16 @@ A complete evldns application requires just a few extra lines of code:
 
   event_init();				/* initialise libevent */
   evldns_init();			/* initialise evldns */
-  int s = bind_to_udp4_port(53);	/* bind a UDP socket */
+  int fd = bind_to_udp4_port(53);	/* bind a UDP socket */
+
+  /* create an evldns server context */
+  struct evldns_server *server = evldns_add_server();
 
   /* register the socket with evldns */
-  struct evldns_server_port *p = evldns_add_server_port(s);
+  evldns_add_server_port(server, fd);
 
   /* register callbacks here */
-  evldns_add_callback(p, qname, qclass, qtype, callback, data);
+  evldns_add_callback(server, qname, qclass, qtype, callback, data);
   ...
 
   /* and set libevent running */
