@@ -90,17 +90,24 @@ struct evldns_server_port *
 evldns_add_server_port(struct evldns_server *server, int socket)
 {
 	evldns_server_port *port;
+
+	/* don't add bad sockets */
+	if (socket < 0) return NULL;
+
+	/* create and populate the evldns_server_port structure */
 	if (!(port = malloc(sizeof(*port)))) {
 		return NULL;
 	}
 	memset(port, 0, sizeof(*port));
-
 	port->server = server;
 	port->socket = socket;
 	port->refcnt = 1;
 	port->closing = 0;
+
+	/* add this to the server's list of ports */
 	TAILQ_INSERT_TAIL(&server->ports, port, next);
 
+	/* and set it up for libevent */
 	event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
 		server_port_ready_callback, port);
 	event_add(&port->event, NULL);

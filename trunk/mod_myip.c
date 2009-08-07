@@ -28,8 +28,10 @@
  *
  */
 
-#include <netinet/in.h>
+#include <netdb.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <evldns.h>
 
 /*
@@ -54,24 +56,25 @@ static void myip_callback(evldns_server_request *srq, void *user_data)
 	ldns_rr_type qclass = ldns_rr_get_class(question);
 	ldns_rr_list *answer = ldns_pkt_answer(resp);
 
-	if (qtype == LDNS_RR_TYPE_TXT || qtype == LDNS_RR_TYPE_ANY) {
-		char *txt = NULL;
-		if (srq->addr.ss_family == AF_INET) {
-			struct sockaddr_in *p = (struct sockaddr_in *)&srq->addr;
-			txt = inet_ntoa(p->sin_addr);
-		} else if (srq->addr.ss_family == AF_INET6) {
-			/* TODO - IPv6 AAAA records */
-		}
+	/* generate TXT records for client address */
+	if ((qclass == LDNS_RR_CLASS_IN || qclass == LDNS_RR_CLASS_CH) &&
+	     (qtype == LDNS_RR_TYPE_TXT ||  qtype == LDNS_RR_TYPE_ANY))
+	{
+		char nbuf[NI_MAXHOST];
 
-		if (txt) {
+		if (getnameinfo((struct sockaddr *)&srq->addr, srq->addrlen,
+				nbuf, sizeof(nbuf), NULL, 0,
+				NI_NUMERICHOST) == 0)
+		{
 			ldns_rr *rr = ldns_rr_clone(question);
-			ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_STR, txt));
+			ldns_rr_push_rdf(rr, ldns_rdf_new_frm_str(LDNS_RDF_TYPE_STR, nbuf));
 			ldns_rr_set_type(rr, LDNS_RR_TYPE_TXT);
 			ldns_rr_set_ttl(rr, 0L);
 			ldns_rr_list_push_rr(answer, rr);
 		}
 	}
 
+	/* generate A records for client address, if the query arrived on IPv4 */
 	if (qclass == LDNS_RR_CLASS_IN && srq->addr.ss_family == AF_INET &&
 	    (qtype == LDNS_RR_TYPE_A || qtype == LDNS_RR_TYPE_ANY)) {
 		struct sockaddr_in *p = (struct sockaddr_in *)&srq->addr;
@@ -84,6 +87,20 @@ static void myip_callback(evldns_server_request *srq, void *user_data)
 		ldns_rr_list_push_rr(answer, rr);
 	}
 
+	/* generate AAAA records for client address, if the query arrived on IPv6 */
+	if (qclass == LDNS_RR_CLASS_IN && srq->addr.ss_family == AF_INET6 &&
+	    (qtype == LDNS_RR_TYPE_AAAA || qtype == LDNS_RR_TYPE_ANY)) {
+		struct sockaddr_in6 *p = (struct sockaddr_in6 *)&srq->addr;
+		ldns_rr *rr = ldns_rr_clone(question);
+		ldns_rdf *rdf = ldns_rdf_new_frm_data(LDNS_RDF_TYPE_AAAA, 16,
+				&p->sin6_addr.s6_addr);
+		ldns_rr_push_rdf(rr, rdf);
+		ldns_rr_set_type(rr, LDNS_RR_TYPE_AAAA);
+		ldns_rr_set_ttl(rr, 0L);
+		ldns_rr_list_push_rr(answer, rr);
+	}
+
+	/* update packet header */
 	ldns_pkt_set_ancount(resp, ldns_rr_list_rr_count(answer));
 	srq->response = resp;
 }

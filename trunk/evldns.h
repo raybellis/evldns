@@ -84,6 +84,7 @@ extern evldns_callback evldns_get_function(const char *name);
 
 /* miscellaneous utility functions */
 extern int bind_to_udp4_port(int port);
+extern int bind_to_udp6_port(int port);
 
 #ifdef __cplusplus
 }

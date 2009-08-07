@@ -40,9 +40,9 @@ int bind_to_udp4_port(int port)
 	int			r, s;
 	struct sockaddr_in	addr;
 
-	s = socket(AF_INET, SOCK_DGRAM, 0);
+	s = socket(PF_INET, SOCK_DGRAM, 0);
 	if (s < 0) {
-		perror("socket");
+		perror("socket (IPv4)");
 		return s;
 	}
 
@@ -50,7 +50,34 @@ int bind_to_udp4_port(int port)
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_port = htons(port);
 	if ((r = bind(s, (struct sockaddr *)&addr, sizeof(addr))) < 0) {
-		perror("bind");
+		perror("bind (IPv4)");
+		return r;
+	}
+
+	return s;
+}
+
+int bind_to_udp6_port(int port)
+{
+	int			r, s;
+	int			v6only = 1;
+	struct sockaddr_in6	addr;
+
+	s = socket(PF_INET6, SOCK_DGRAM, 0);
+	if (s < 0) {
+		perror("socket (IPv6)");
+		return s;
+	}
+
+	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only))) {
+		perror("setsockopt (IPv6)");
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sin6_addr = in6addr_any;
+	addr.sin6_port = htons(port);
+	if ((r = bind(s, (struct sockaddr *)&addr, sizeof(addr))) < 0) {
+		perror("bind (IPv6)");
 		return r;
 	}
 
