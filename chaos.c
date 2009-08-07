@@ -54,7 +54,6 @@ void query_only(evldns_server_request *srq, void *user_data)
 
 int main(int argc, char *argv[])
 {
-	int				 s;
 	struct evldns_server		*p;
 	evldns_callback			 myip, txt;
 
@@ -64,11 +63,9 @@ int main(int argc, char *argv[])
 	/* create an evldns server context */
 	p = evldns_add_server();
 
-	/* create a socket and pass it to evldns */
-	if ((s = bind_to_udp4_port(5053)) < 0) {
-		return EXIT_FAILURE;
-	}
-	evldns_add_server_port(p, s);
+	/* create sockets and add them to the context */
+	evldns_add_server_port(p, bind_to_udp4_port(5053));
+	evldns_add_server_port(p, bind_to_udp6_port(5053));
 
 	/* load a couple of plugins */
 	evldns_load_plugin(p, ".libs/mod_myip.so");
