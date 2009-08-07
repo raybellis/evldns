@@ -47,6 +47,7 @@ int bind_to_udp4_port(int port)
 	}
 
 	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = INADDR_ANY;
 	addr.sin_port = htons(port);
 	if ((r = bind(s, (struct sockaddr *)&addr, sizeof(addr))) < 0) {
@@ -74,6 +75,7 @@ int bind_to_udp6_port(int port)
 	}
 
 	memset(&addr, 0, sizeof(addr));
+	addr.sin6_family = AF_INET6;
 	addr.sin6_addr = in6addr_any;
 	addr.sin6_port = htons(port);
 	if ((r = bind(s, (struct sockaddr *)&addr, sizeof(addr))) < 0) {
