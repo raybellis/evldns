@@ -1,5 +1,8 @@
 Changelog: $Id$
 
+2009/08/07 - improved IPv6 support
+	     NB: MacOS X requires that sin6_addr.sin6_family is correct.
+
 2009/08/05 - license text in all files and autoconf updates from Jakob
 
 2009/08/05 - split out separate server contexts each of which
