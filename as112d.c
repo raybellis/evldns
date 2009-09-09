@@ -194,17 +194,13 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 }
 int main(int argc, char *argv[])
 {
-	int				 s;
 	struct evldns_server		*p;
-
-	if ((s = bind_to_udp4_port(5053)) < 0) {
-		return EXIT_FAILURE;
-	}
 
 	create_zones();
 	event_init();
 	p = evldns_add_server();
-	evldns_add_server_port(p, s);
+	evldns_add_server_port(p, bind_to_udp4_port(5053), 0);
+	evldns_add_server_port(p, bind_to_tcp4_port(5053, 10), 1);
 	evldns_add_callback(p, NULL, LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, query_only, NULL);
 	evldns_add_callback(p, "*.in-addr.arpa.", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, as112_callback, NULL);
 	event_dispatch();
