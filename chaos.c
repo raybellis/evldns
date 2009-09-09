@@ -64,8 +64,8 @@ int main(int argc, char *argv[])
 	p = evldns_add_server();
 
 	/* create sockets and add them to the context */
-	evldns_add_server_port(p, bind_to_udp4_port(5053), 0);
-	evldns_add_server_port(p, bind_to_udp6_port(5053), 0);
+	evldns_add_server_port(p, bind_to_udp4_port(5053));
+	evldns_add_server_port(p, bind_to_udp6_port(5053));
 
 	/* load a couple of plugins */
 	evldns_load_plugin(p, ".libs/mod_myip.so");
