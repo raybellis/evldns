@@ -26,6 +26,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
+ * This source file is derived from 'evdns.c' from libevent, originally
+ * developed by Adam Langley <agl@imperialviolet.org>
+ *
  */
 
 #include <stdlib.h>
@@ -269,13 +272,14 @@ server_port_flush(evldns_server_port *port)
 		if (server_request_free(req)) {
 			return;
 		}
+	}
 
-		(void)event_del(&port->event);
-		event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
-			server_port_ready_callback, port);
-		if (event_add(&port->event, NULL) < 0) {
-			// TODO: warn
-		}
+	/* no more write events pending - go back to read-only mode */
+	(void)event_del(&port->event);
+	event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
+		server_port_ready_callback, port);
+	if (event_add(&port->event, NULL) < 0) {
+		// TODO: warn
 	}
 }
 
