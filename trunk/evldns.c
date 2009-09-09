@@ -48,7 +48,7 @@ struct evldns_server_port {
 	evldns_server			*server;
 	int				 socket;
 	int				 refcnt;
-	char				 choked;
+	char				 is_tcp;
 	char				 closing;
 	struct event			 event;
 	struct evldns_server_request	*pending_replies;
@@ -66,6 +66,7 @@ struct evldns_cb {
 typedef struct evldns_cb evldns_cb;
 
 /* forward declarations */
+static void server_port_accept_callback(int fd, short events, void *arg);
 static void server_port_ready_callback(int fd, short events, void *arg);
 static void server_port_read(evldns_server_port *port);
 static void server_port_free(evldns_server_port *port);
@@ -93,6 +94,8 @@ struct evldns_server_port *
 evldns_add_server_port(struct evldns_server *server, int socket)
 {
 	evldns_server_port *port;
+	int type;
+	socklen_t typelen = sizeof(type);
 
 	/* don't add bad sockets */
 	if (socket < 0) return NULL;
@@ -107,12 +110,21 @@ evldns_add_server_port(struct evldns_server *server, int socket)
 	port->refcnt = 1;
 	port->closing = 0;
 
+	/* find out if it's TCP or not */
+	getsockopt(socket, SOL_SOCKET, SO_TYPE, &type, &typelen);
+	port->is_tcp = (type == SOCK_STREAM);
+
 	/* add this to the server's list of ports */
 	TAILQ_INSERT_TAIL(&server->ports, port, next);
 
 	/* and set it up for libevent */
-	event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
-		server_port_ready_callback, port);
+	if (is_tcp) {
+		event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
+			server_port_accept_callback, port);
+	} else {
+		event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
+			server_port_ready_callback, port);
+	}
 	event_add(&port->event, NULL);
 
 	return port;
@@ -147,8 +159,7 @@ evldns_server_request_respond(evldns_server_request *req)
 		}
 	}
 
-	r = sendto(port->socket, req->wire_response, req->wire_len,
-		   MSG_DONTWAIT,
+	r = sendto(req->socket, req->wire_response, req->wire_len, MSG_DONTWAIT,
 		   (struct sockaddr *) &req->addr, req->addrlen);
 
 	if (r < 0) {
@@ -164,7 +175,6 @@ evldns_server_request_respond(evldns_server_request *req)
 		} else {
 			req->prev_pending = req->next_pending = req;
 			port->pending_replies = req;
-			port->choked = 1;
 
 			(void)event_del(&port->event);
 			event_set(&port->event, port->socket, (port->closing ? 0 : EV_READ) | EV_WRITE | EV_PERSIST, server_port_ready_callback, port);
@@ -188,25 +198,12 @@ evldns_server_request_respond(evldns_server_request *req)
 }
 
 static int
-handle_packet(uint8_t *buffer, size_t buflen, evldns_server_port *port, struct sockaddr *addr, socklen_t addrlen)
+handle_packet(uint8_t *buffer, size_t buflen, evldns_server_port *port, evldns_server_request *req)
 {
-	evldns_server_request *req = NULL;
-	ldns_status status;
-
-	req = malloc(sizeof(evldns_server_request));
-	if (req == NULL) {
-		return -1;
-	}
-
-	memset(req, 0, sizeof(evldns_server_request));
-
-	memcpy(&req->addr, addr, addrlen);
-	req->addrlen = addrlen;
 	req->port = port;
 	port->refcnt++;
 
-	status = ldns_wire2pkt(&req->request, buffer, buflen);
-	if (status != LDNS_STATUS_OK) {
+	if (ldns_wire2pkt(&req->request, buffer, buflen) != LDNS_STATUS_OK) {
 		return -1;
 	}
 
@@ -218,39 +215,48 @@ handle_packet(uint8_t *buffer, size_t buflen, evldns_server_port *port, struct s
 }
 
 static void
+server_port_accept_callback(int fd, short events, void *arg)
+{
+	evldns_server_port *port = (evldns_server_port *)arg;
+	evldns_server_request *req = calloc(1, sizeof(evldns_server_request));
+
+	req->addrlen = sizeof(struct sockaddr_storage);
+	req->socket = accept(fd, (struct sockaddr *)&req->addr, &req->addrlen);
+}
+
+static void
 server_port_ready_callback(int fd, short events, void *arg)
 {
 	evldns_server_port *port = (evldns_server_port *)arg;
 
-	if (events & EV_WRITE) {
-		port->choked = 0;
-		server_port_flush(port);
-	}
 	if (events & EV_READ) {
 		server_port_read(port);
+	}
+	if (events & EV_WRITE) {
+		server_port_flush(port);
 	}
 }
 
 static void server_port_read(evldns_server_port *port)
 {
 	uint8_t buffer[LDNS_MAX_PACKETLEN];
-	struct sockaddr_storage addr;
-	socklen_t addrlen;
-
 	while (1) {
-		addrlen = sizeof(struct sockaddr_storage);
-		int r = recvfrom(port->socket, buffer, sizeof(buffer),
-				MSG_DONTWAIT,
-				(struct sockaddr *) &addr, &addrlen);
-		if (r < 0) {
-			if (errno == EAGAIN) {
-				return;
+		evldns_server_request *req = calloc(1, sizeof(evldns_server_request));
+		// TODO: malloc check
+		req->addrlen = sizeof(struct sockaddr_storage);
+
+		int buflen = recvfrom(port->socket, buffer, sizeof(buffer), MSG_DONTWAIT,
+				(struct sockaddr *)&req->addr, &req->addrlen);
+		if (buflen < 0) {
+			if (errno != EAGAIN) {
+				perror("recvfrom");
 			}
-			perror("recvfrom");
+			free(req);
 			return;
 		}
 
-		handle_packet(buffer, r, port, (struct sockaddr *) &addr, addrlen);
+		req->socket = port->socket;
+		handle_packet(buffer, buflen, port, req);
 	}
 }
 

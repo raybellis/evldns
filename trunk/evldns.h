@@ -50,6 +50,7 @@ struct evldns_server_request {
 	struct evldns_server_request	*next_pending;
 	struct evldns_server_request	*prev_pending;
 
+	int				 socket;
 	struct evldns_server_port	*port;
 	struct sockaddr_storage		 addr;
 	socklen_t			 addrlen;
@@ -85,6 +86,8 @@ extern evldns_callback evldns_get_function(const char *name);
 /* miscellaneous utility functions */
 extern int bind_to_udp4_port(int port);
 extern int bind_to_udp6_port(int port);
+extern int bind_to_tcp4_port(int port, int backlog);
+extern int bind_to_tcp6_port(int port, int backlog);
 
 #ifdef __cplusplus
 }

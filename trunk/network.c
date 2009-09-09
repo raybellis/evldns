@@ -32,56 +32,105 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <netdb.h>
 
-int bind_to_udp4_port(int port)
-{
-	int			r, s;
-	struct sockaddr_in	addr;
+/*--------------------------------------------------------------------*/
 
-	s = socket(PF_INET, SOCK_DGRAM, 0);
+static int bind_to_port(int port, int domain, int family, int type, int backlog)
+{
+	int			 r, s;
+	struct sockaddr_in	 addr4;
+	struct sockaddr_in6	 addr6;
+	struct sockaddr		*addr;
+	socklen_t		 addrlen;
+
+	/* make the actual socket */
+	s = socket(domain, type, 0);
 	if (s < 0) {
-		perror("socket (IPv4)");
+		perror("socket");
 		return s;
 	}
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(port);
-	if ((r = bind(s, (struct sockaddr *)&addr, sizeof(addr))) < 0) {
-		perror("bind (IPv4)");
+	/* disable automatic 6to4 if necessary */
+	if (domain == PF_INET6) {
+		int v6only = 1;
+		if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only))) {
+			perror("setsockopt");
+		}
+	}
+
+	/* set up the local address (protocol specific) */
+	if (family == AF_INET) {
+		addrlen = sizeof(addr4);
+		addr = (struct sockaddr *)&addr4;
+		memset(addr, 0, addrlen);
+
+		addr4.sin_family = family;
+		addr4.sin_addr.s_addr = INADDR_ANY;
+		addr4.sin_port = htons(port);
+	} else if (family == AF_INET6) {
+		addrlen = sizeof(addr6);
+		addr = (struct sockaddr *)&addr6;
+		memset(addr, 0, addrlen);
+
+		addr6.sin6_family = AF_INET6;
+		addr6.sin6_addr = in6addr_any;
+		addr6.sin6_port = htons(port);
+	} else {
+		fprintf(stderr, "address family not recognized\n");
+		close(s);
+		return -1;
+	}
+
+
+	/* bind to that local address */
+	if ((r = bind(s, addr, addrlen)) < 0) {
+		perror("bind");
+		close(s);
 		return r;
+	}
+
+	/* if it's TCP, listen */
+	if (type == SOCK_STREAM) {
+		if ((r = listen(s, backlog)) < 0) {
+			perror("listen");
+			close(s);
+			return r;
+		}
+	}
+
+	/* make the socket non-blocking */
+	if (fcntl(s, F_SETFL, O_NONBLOCK) < 0) {
+		perror("fcntl");
 	}
 
 	return s;
 }
+
+/*--------------------------------------------------------------------*/
+
+int bind_to_udp4_port(int port)
+{
+	return bind_to_port(port, PF_INET, AF_INET, SOCK_DGRAM, 0);
+}
+
+int bind_to_tcp4_port(int port, int backlog)
+{
+	return bind_to_port(port, PF_INET, AF_INET, SOCK_STREAM, backlog);
+}
+
+/*--------------------------------------------------------------------*/
 
 int bind_to_udp6_port(int port)
 {
-	int			r, s;
-	int			v6only = 1;
-	struct sockaddr_in6	addr;
-
-	s = socket(PF_INET6, SOCK_DGRAM, 0);
-	if (s < 0) {
-		perror("socket (IPv6)");
-		return s;
-	}
-
-	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only))) {
-		perror("setsockopt (IPv6)");
-	}
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin6_family = AF_INET6;
-	addr.sin6_addr = in6addr_any;
-	addr.sin6_port = htons(port);
-	if ((r = bind(s, (struct sockaddr *)&addr, sizeof(addr))) < 0) {
-		perror("bind (IPv6)");
-		return r;
-	}
-
-	return s;
+	return bind_to_port(port, PF_INET6, AF_INET6, SOCK_DGRAM, 0);
 }
+
+int bind_to_tcp6_port(int port, int backlog)
+{
+	return bind_to_port(port, PF_INET6, AF_INET6, SOCK_STREAM, backlog);
+}
+
+/*--------------------------------------------------------------------*/
