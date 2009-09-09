@@ -118,7 +118,7 @@ evldns_add_server_port(struct evldns_server *server, int socket)
 	TAILQ_INSERT_TAIL(&server->ports, port, next);
 
 	/* and set it up for libevent */
-	if (is_tcp) {
+	if (port->is_tcp) {
 		event_set(&port->event, port->socket, EV_READ | EV_PERSIST,
 			server_port_accept_callback, port);
 	} else {
