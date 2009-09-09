@@ -37,20 +37,19 @@ Should no callback match then evldns will automatically generate and
 return a packet with RCODE = 5 (Refused).
 
 The "data" parameter is used to pass an additional parameter supplied when
-the callback function was registered.  See "mod_version.c" for an example
+the callback function was registered.  See "mod_txtrec.c" for an example
 of how "data" may be used to pass expected response data into a callback.
 
 A complete evldns application requires just a few extra lines of code:
 
   event_init();				/* initialise libevent */
   evldns_init();			/* initialise evldns */
-  int fd = bind_to_udp4_port(53);	/* bind a UDP socket */
 
   /* create an evldns server context */
   struct evldns_server *server = evldns_add_server();
 
   /* register the socket with evldns */
-  evldns_add_server_port(server, fd);
+  evldns_add_server_port(server, bind_to_udp4_port(53));
 
   /* register callbacks here */
   evldns_add_callback(server, qname, qclass, qtype, callback, data);
