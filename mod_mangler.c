@@ -55,7 +55,7 @@ static void bitflip(evldns_server_request *srq, void *user_data)
 	/* convert LDNS packet to wire format if necessary */
 	if (!srq->wire_response) {
 		ldns_status status = ldns_pkt2wire(&srq->wire_response,
-			srq->response, &srq->wire_len);
+			srq->response, &srq->wire_resplen);
 		if (status != LDNS_STATUS_OK) {
 			return;
 		}
@@ -67,7 +67,7 @@ static void bitflip(evldns_server_request *srq, void *user_data)
 
 	/* randomly flip n_bits bits */
 	for (i = 0; i < n_bits; ++i) {
-		int offset = random() % srq->wire_len;
+		int offset = random() % srq->wire_resplen;
 		int bit = random() % 8;
 		srq->wire_response[offset] ^= (1 << bit);
 	}
