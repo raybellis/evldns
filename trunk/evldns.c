@@ -178,14 +178,13 @@ static void
 server_port_tcp_accept_callback(int fd, short events, void *arg)
 {
 	evldns_server_port *port = (evldns_server_port *)arg;
-	evldns_server_request *req = calloc(1, sizeof(evldns_server_request));
-	// TODO: error check
+	evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: error check
 
 	req->addrlen = sizeof(struct sockaddr_storage);
 	req->socket = accept(fd, (struct sockaddr *)&req->addr, &req->addrlen);
 
 	/* create event on new socket and register that event */
-	req->event = calloc(1, sizeof(struct event));
+	req->event = calloc(1, sizeof(struct event)); // TODO: error check
 	event_set(req->event, req->socket, EV_READ | EV_PERSIST,
 			server_port_tcp_read_callback, port);
 	event_add(req->event, NULL);
@@ -250,11 +249,9 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 		return 0;
 	}
 
-/*
 	if (port->pending_replies) {
 		server_port_udp_write_callback(port);
 	}
-*/
 
 	return 0;
 }
@@ -264,8 +261,7 @@ server_port_udp_read_callback(evldns_server_port *port)
 {
 	uint8_t buffer[LDNS_MAX_PACKETLEN];
 	while (1) {
-		evldns_server_request *req = calloc(1, sizeof(evldns_server_request));
-		// TODO: malloc check
+		evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: malloc check
 		req->addrlen = sizeof(struct sockaddr_storage);
 		req->socket = port->socket;
 
@@ -363,6 +359,8 @@ server_request_free(evldns_server_request *req)
 
 	ldns_pkt_free(req->request);
 	ldns_pkt_free(req->response);
+
+	free(req->wire_request);
 	free(req->wire_response);
 
 	if (req->next_pending && req->next_pending != req) {
@@ -372,6 +370,7 @@ server_request_free(evldns_server_request *req)
 
 	if (rc == 0) {
 		server_port_free(req->port);
+		free(req->event);
 		free(req);
 		return 1;
 	}
