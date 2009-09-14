@@ -47,19 +47,34 @@ struct evldns_server_request;
 
 struct evldns_server_request {
 
-	struct evldns_server_request	*next_pending;
-	struct evldns_server_request	*prev_pending;
-
-	int				 socket;
+	/* the parent server */
 	struct evldns_server_port	*port;
+
+	/* current socket and (optional) event object */
+	int				 socket;
+	struct event			*event;
+
+	/* the client's address */
 	struct sockaddr_storage		 addr;
 	socklen_t			 addrlen;
 
+	/* formatted DNS packets */
 	ldns_pkt			*request;
 	ldns_pkt			*response;
 
+	/* unformatted request data */
+	uint8_t				*wire_request;
+	uint16_t			 wire_reqlen;
+	uint16_t			 wire_reqdone;
+
+	/* unformatted response data */
 	uint8_t				*wire_response;
-	size_t				 wire_len;
+	size_t				 wire_resplen;
+	size_t				 wire_respdone;
+
+	/* pending requests for UDP mode */
+	struct evldns_server_request	*next_pending;
+	struct evldns_server_request	*prev_pending;
 };
 typedef struct evldns_server_request evldns_server_request;
 
