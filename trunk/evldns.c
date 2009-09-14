@@ -51,7 +51,7 @@ struct evldns_server_port {
 	char				 is_tcp;
 	char				 closing;
 	struct event			*event;
-	struct evldns_server_request	*pending_replies;
+	TAILQ_HEAD(evldnssrq, evldns_server_request) pending;
 };
 typedef struct evldns_server_port evldns_server_port;
 
@@ -125,6 +125,7 @@ evldns_add_server_port(struct evldns_server *server, int socket)
 		event_set(port->event, port->socket, EV_READ | EV_PERSIST,
 			server_port_tcp_accept_callback, port);
 	} else {
+		TAILQ_INIT(&port->pending);
 		event_set(port->event, port->socket, EV_READ | EV_PERSIST,
 			server_port_udp_callback, port);
 	}
@@ -221,18 +222,12 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 
 	if (r < 0) {
 		if (errno != EAGAIN) {
+			perror("sendto");
 			return -1;
 		}
 
-		if (port->pending_replies) {
-			req->prev_pending = port->pending_replies->prev_pending;
-			req->next_pending = port->pending_replies;
-			req->prev_pending->next_pending =
-				req->next_pending->prev_pending = req;
-		} else {
-			req->prev_pending = req->next_pending = req;
-			port->pending_replies = req;
-
+		TAILQ_INSERT_TAIL(&port->pending, req, next);
+		if (TAILQ_FIRST(&port->pending) == req) {
 			(void)event_del(port->event);
 			event_set(port->event, port->socket,
 				  (port->closing ? 0 : EV_READ) | EV_WRITE | EV_PERSIST,
@@ -249,7 +244,7 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 		return 0;
 	}
 
-	if (port->pending_replies) {
+	if (!TAILQ_EMPTY(&port->pending)) {
 		server_port_udp_write_callback(port);
 	}
 
@@ -284,18 +279,21 @@ server_port_udp_read_callback(evldns_server_port *port)
 static void
 server_port_udp_write_callback(evldns_server_port *port)
 {
-	while (port->pending_replies) {
-		evldns_server_request *req = port->pending_replies;
+	struct evldns_server_request *req;
+	TAILQ_FOREACH(req, &port->pending, next) {
+
 		int r = sendto(port->socket, req->wire_response, req->wire_resplen,
 			MSG_DONTWAIT,
 			(struct sockaddr *)&req->addr, req->addrlen);
+
 		if (r < 0) {
 			if (errno == EAGAIN) {
 				return;
 			}
-			// TODO: warn
+			perror("sendto");
 		}
 
+		TAILQ_REMOVE(&port->pending, req, next);
 		if (server_request_free(req)) {
 			return;
 		}
@@ -344,37 +342,13 @@ server_port_free(evldns_server_port *port)
 static int
 server_request_free(evldns_server_request *req)
 {
-	int rc = 1;
-
-	if (req->port) {
-		if (req->port->pending_replies == req) {
-			if (req->next_pending) {
-				req->port->pending_replies = req->next_pending;
-			} else {
-				req->port->pending_replies = NULL;
-			}
-		}
-		rc = --req->port->refcnt;
-	}
+	req->port->refcnt--;
 
 	ldns_pkt_free(req->request);
 	ldns_pkt_free(req->response);
 
 	free(req->wire_request);
 	free(req->wire_response);
-
-	if (req->next_pending && req->next_pending != req) {
-		req->next_pending->prev_pending = req->prev_pending;
-		req->prev_pending->next_pending = req->next_pending;
-	}
-
-	if (rc == 0) {
-		server_port_free(req->port);
-		free(req->event);
-		free(req);
-		return 1;
-	}
-
 	free(req->event);
 	free(req);
 

@@ -35,6 +35,7 @@
 extern "C" {
 #endif
 
+#include <sys/queue.h>
 #include <event.h>
 #include <ldns/ldns.h>
 
@@ -73,8 +74,7 @@ struct evldns_server_request {
 	size_t				 wire_respdone;
 
 	/* pending requests for UDP mode */
-	struct evldns_server_request	*next_pending;
-	struct evldns_server_request	*prev_pending;
+	TAILQ_ENTRY(evldns_server_request) next;
 };
 typedef struct evldns_server_request evldns_server_request;
 
