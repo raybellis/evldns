@@ -134,3 +134,13 @@ int bind_to_tcp6_port(int port, int backlog)
 }
 
 /*--------------------------------------------------------------------*/
+
+int socket_is_tcp(int fd)
+{
+	int		type;
+	socklen_t	typelen = sizeof(type);
+
+	getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &typelen);
+
+	return (type == SOCK_STREAM);
+}

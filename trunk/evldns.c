@@ -38,7 +38,6 @@
 #include <evldns.h>
 
 struct evldns_server {
-	TAILQ_HEAD(evldnsfdq, evldns_server_port) ports;
 	TAILQ_HEAD(evldnscbq, evldns_cb) callbacks;
 };
 typedef struct evldns_server evldns_server;
@@ -48,10 +47,10 @@ struct evldns_server_port {
 	evldns_server			*server;
 	int				 socket;
 	int				 refcnt;
-	char				 is_tcp;
-	char				 closing;
 	struct event			*event;
 	TAILQ_HEAD(evldnssrq, evldns_server_request) pending;
+	int				 is_tcp:1;
+	int				 closing:1;
 };
 typedef struct evldns_server_port evldns_server_port;
 
@@ -82,12 +81,9 @@ static void dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_reques
 struct evldns_server *evldns_add_server()
 {
 	evldns_server *server;
-	if (!(server = malloc(sizeof(*server)))) {
+	if (!(server = calloc(1, sizeof(*server)))) {
 		return NULL;
 	}
-	memset(server, 0, sizeof(*server));
-
-	TAILQ_INIT(&server->ports);
 	TAILQ_INIT(&server->callbacks);
 
 	return server;
@@ -97,38 +93,31 @@ struct evldns_server_port *
 evldns_add_server_port(struct evldns_server *server, int socket)
 {
 	evldns_server_port *port;
-	int type;
-	socklen_t typelen = sizeof(type);
+	void (*callback)(int, short, void *);
 
 	/* don't add bad sockets */
 	if (socket < 0) return NULL;
 
-	/* create and populate the evldns_server_port structure */
+	/* create the evldns_server_port structure */
 	if (!(port = calloc(1, sizeof(*port)))) {
 		return NULL;
 	}
-	memset(port, 0, sizeof(*port));
+
+	/* and populate it */
 	port->server = server;
 	port->socket = socket;
 	port->event = calloc(1, sizeof(struct event)); // TODO: errorcheck
 	port->refcnt = 1;
-
-	/* find out if it's TCP or not */
-	getsockopt(socket, SOL_SOCKET, SO_TYPE, &type, &typelen);
-	port->is_tcp = (type == SOCK_STREAM);
-
-	/* add this to the server's list of ports */
-	TAILQ_INSERT_TAIL(&server->ports, port, next);
+	port->is_tcp = socket_is_tcp(socket);
 
 	/* and set it up for libevent */
 	if (port->is_tcp) {
-		event_set(port->event, port->socket, EV_READ | EV_PERSIST,
-			server_port_tcp_accept_callback, port);
+		callback = server_port_tcp_accept_callback;
 	} else {
-		TAILQ_INIT(&port->pending);
-		event_set(port->event, port->socket, EV_READ | EV_PERSIST,
-			server_port_udp_callback, port);
+		callback = server_port_udp_callback;
+		TAILQ_INIT(&port->pending);		// only needed for UDP
 	}
+	event_set(port->event, port->socket, EV_READ | EV_PERSIST, callback, port);
 	event_add(port->event, NULL);
 
 	return port;
@@ -149,14 +138,28 @@ server_process_packet(uint8_t *buffer, size_t buflen, evldns_server_port *port, 
 	req->port = port;
 	port->refcnt++;
 
+	/*
+	 * convert the received packet into LDNS format
+	 */
 	if (ldns_wire2pkt(&req->request, buffer, buflen) != LDNS_STATUS_OK) {
 		return -1;
 	}
 
+	/*
+	 * send it to the callback chain
+	 */
 	dispatch_callbacks(&port->server->callbacks, req);
 
+	/*
+	 * if the callbacks didn't generate a wire-format response
+	 * then do the necessary stuff here
+	 */
 	if (!req->wire_response) {
 
+		/*
+		 * if the callbacks didn't even create an ldns format
+		 * response then return a default (REFUSED) ldns response
+		 */
 		if (!req->response) {
 			req->response = evldns_response(req->request,
 				LDNS_RCODE_REFUSED);
@@ -256,7 +259,7 @@ server_port_udp_read_callback(evldns_server_port *port)
 {
 	uint8_t buffer[LDNS_MAX_PACKETLEN];
 	while (1) {
-		evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: malloc check
+		evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: alloc check
 		req->addrlen = sizeof(struct sockaddr_storage);
 		req->socket = port->socket;
 
@@ -352,14 +355,15 @@ server_request_free(evldns_server_request *req)
 	free(req->event);
 	free(req);
 
+	// TODO: free port structure on refcnt == 0?
+
 	return 0;
 }
 
 void evldns_add_callback(evldns_server *server, const char *dname, ldns_rr_class rr_class, ldns_rr_type rr_type, evldns_callback callback, void *data)
 {
-	evldns_cb *cb = (evldns_cb *)malloc(sizeof(evldns_cb));
+	evldns_cb *cb = (evldns_cb *)calloc(1, sizeof(evldns_cb));
 	// TODO: error check
-	memset(cb, 0, sizeof(evldns_cb));
 	if (dname != NULL) {
 		cb->rdf = ldns_dname_new_frm_str(dname);
 		ldns_dname2canonical(cb->rdf);
@@ -377,8 +381,7 @@ dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req)
 	evldns_cb *cb;
 	ldns_pkt *pkt = req->request;
 	ldns_rr *q = ldns_rr_list_rr(ldns_pkt_question(pkt), 0);
-	ldns_rdf *owner = ldns_dname_clone_from(ldns_rr_owner(q), 0);
-	ldns_dname2canonical(owner);
+	ldns_rdf *owner = NULL;
 
 	TAILQ_FOREACH(cb, callbacks, next) {
 		if ((cb->rr_class != LDNS_RR_CLASS_ANY) &&
@@ -395,6 +398,12 @@ dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req)
 		}
 
 		if (cb->rdf) {
+			/* deferred initialisation */
+			if (!owner) {
+	       			owner = ldns_dname_clone_from(ldns_rr_owner(q), 0);
+				ldns_dname2canonical(owner);
+			}
+
 			if (!ldns_dname_match_wildcard(owner, cb->rdf)) {
 				continue;
 			}
