@@ -45,6 +45,7 @@ static int bind_to_port(int port, int domain, int family, int type, int backlog)
 	struct sockaddr_in6	 addr6;
 	struct sockaddr		*addr;
 	socklen_t		 addrlen;
+	int			 reuse = 1;
 
 	/* make the actual socket */
 	s = socket(domain, type, 0);
@@ -57,9 +58,15 @@ static int bind_to_port(int port, int domain, int family, int type, int backlog)
 	if (domain == PF_INET6) {
 		int v6only = 1;
 		if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only))) {
-			perror("setsockopt");
+			perror("setsockopt(IPV6_ONLY)");
 		}
 	}
+
+	/* allow socket re-use */
+	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) {
+		perror("setsockopt(SO_REUSEADDR)");
+	}
+
 
 	/* set up the local address (protocol specific) */
 	if (family == AF_INET) {

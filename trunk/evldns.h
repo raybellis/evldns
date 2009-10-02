@@ -72,6 +72,7 @@ struct evldns_server_request {
 	uint8_t				*wire_response;
 	size_t				 wire_resplen;
 	size_t				 wire_respdone;
+	uint8_t				 wire_resphead:1;
 
 	/* pending requests for UDP mode */
 	TAILQ_ENTRY(evldns_server_request) next;

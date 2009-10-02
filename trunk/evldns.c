@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/queue.h>
+#include <arpa/inet.h>
 
 #include <evldns.h>
 
@@ -65,17 +66,17 @@ struct evldns_cb {
 typedef struct evldns_cb evldns_cb;
 
 /* forward declarations */
-static void server_port_tcp_accept_callback(int fd, short events, void *arg);
-static void server_port_tcp_read_callback(int fd, short events, void *arg);
+static void evldns_tcp_accept_callback(int fd, short events, void *arg);
+static void evldns_tcp_read_callback(int fd, short events, void *arg);
+static void evldns_tcp_write_callback(int fd, short events, void *arg);
 
-static void server_port_udp_callback(int fd, short events, void *arg);
-static void server_port_udp_read_callback(evldns_server_port *port);
-static void server_port_udp_write_callback(evldns_server_port *port);
+static void evldns_udp_callback(int fd, short events, void *arg);
+static void evldns_udp_read_callback(evldns_server_port *port);
+static void evldns_udp_write_callback(evldns_server_port *port);
 
 static void server_port_free(evldns_server_port *port);
 static int server_request_free(evldns_server_request *req);
-
-static void dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req);
+static int server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen);
 
 /* exported function */
 struct evldns_server *evldns_add_server()
@@ -112,9 +113,9 @@ evldns_add_server_port(struct evldns_server *server, int socket)
 
 	/* and set it up for libevent */
 	if (port->is_tcp) {
-		callback = server_port_tcp_accept_callback;
+		callback = evldns_tcp_accept_callback;
 	} else {
-		callback = server_port_udp_callback;
+		callback = evldns_udp_callback;
 		TAILQ_INIT(&port->pending);		// only needed for UDP
 	}
 	event_set(port->event, port->socket, EV_READ | EV_PERSIST, callback, port);
@@ -132,85 +133,239 @@ evldns_close_server_port(evldns_server_port *port)
 	port->closing = 1;
 }
 
-static int
-server_process_packet(uint8_t *buffer, size_t buflen, evldns_server_port *port, evldns_server_request *req)
-{
-	req->port = port;
-	port->refcnt++;
+/*-------------------------------------------------------------------*/
 
-	/*
-	 * convert the received packet into LDNS format
-	 */
-	if (ldns_wire2pkt(&req->request, buffer, buflen) != LDNS_STATUS_OK) {
-		return -1;
-	}
-
-	/*
-	 * send it to the callback chain
-	 */
-	dispatch_callbacks(&port->server->callbacks, req);
-
-	/*
-	 * if the callbacks didn't generate a wire-format response
-	 * then do the necessary stuff here
-	 */
-	if (!req->wire_response) {
-
-		/*
-		 * if the callbacks didn't even create an ldns format
-		 * response then return a default (REFUSED) ldns response
-		 */
-		if (!req->response) {
-			req->response = evldns_response(req->request,
-				LDNS_RCODE_REFUSED);
-		}
-
-		ldns_status status = ldns_pkt2wire(&req->wire_response,
-			req->response, &req->wire_resplen);
-		if (status != LDNS_STATUS_OK) {
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
-/*
- * This callback is only used for TCP sockets when a connection is first accepted
- */
 static void
-server_port_tcp_accept_callback(int fd, short events, void *arg)
+evldns_tcp_accept_callback(int fd, short events, void *arg)
 {
+	struct timeval tv = { 10, 0 };
 	evldns_server_port *port = (evldns_server_port *)arg;
 	evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: error check
 
+	req->port = port;
 	req->addrlen = sizeof(struct sockaddr_storage);
 	req->socket = accept(fd, (struct sockaddr *)&req->addr, &req->addrlen);
 
 	/* create event on new socket and register that event */
 	req->event = calloc(1, sizeof(struct event)); // TODO: error check
 	event_set(req->event, req->socket, EV_READ | EV_PERSIST,
-			server_port_tcp_read_callback, port);
-	event_add(req->event, NULL);
+			evldns_tcp_read_callback, req);
+	event_add(req->event, &tv);
+}
+
+/*-------------------------------------------------------------------*/
+
+static void evldns_tcp_cleanup(evldns_server_request *req)
+{
+	event_del(req->event);
+	shutdown(req->socket, SHUT_RDWR);
+	close(req->socket);
+	server_request_free(req);
+}
+
+static int
+evldns_tcp_write_packet(evldns_server_request *req)
+{
+	int		r;
+	/*
+	 * send the two byte header
+	 */
+	if (!req->wire_resphead) {
+
+		uint16_t len = htons(req->wire_resplen);
+		r = send(req->socket, &len, sizeof(len), 0);
+		if (r < 0) {
+			if (errno == EAGAIN || errno == EINTR) {
+				return 0;
+			} else {
+				perror("send");
+				return -1;
+			}
+		} else if (r == 0) {
+			return 0;
+		} else {
+			req->wire_resphead = 1;
+		}
+	}
+
+	/*
+	 * send as much of the rest of the packet as possible
+	 */
+	while (req->wire_respdone < req->wire_resplen) {
+		r = send(req->socket, req->wire_response + req->wire_respdone,
+		     	req->wire_resplen - req->wire_respdone, 0);
+		if (r < 0) {
+			if (errno == EAGAIN || errno == EINTR) {
+				return 0;
+			} else {
+				perror("send");
+				return -1;
+			}
+		} else if (r == 0) {
+			return 0;
+		} else {
+			req->wire_respdone += r;
+		}
+	}
+
+	if (req->wire_respdone >= req->wire_resplen) {
+		/*
+	 	 * if the whole packet has been sent without any errors set the
+	 	 * socket back to read-only mode so that more requests can be
+	 	 * received
+	 	 */
+		struct timeval tv = { 10, 0 };
+		event_del(req->event);
+		event_set(req->event, req->socket, EV_READ | EV_PERSIST,
+  		  	evldns_tcp_read_callback, req);
+		if (event_add(req->event, &tv) < 0) {
+			// TODO: warn
+		}
+
+		/*
+		 * set up the request object reader to receive another
+		 * request - without this it'll loop
+		 */
+		req->wire_reqdone = 0;
+		req->wire_reqlen = 0;
+
+		return 1;
+	} else {
+		return 0;
+	}
 }
 
 static void
-server_port_tcp_read_callback(int fd, short events, void *arg)
+evldns_tcp_write_queue(evldns_server_request *req)
 {
+	int		r;
+
+	/*
+	 * first time we've seen this packet, wire_resphead == 0
+	 * indicates that the two byte header needs to be written
+	 */
+	req->wire_resphead = 0;
+
+	/*
+	 * send the packet, and leave libevent expecting more write events
+	 * if the whole packet wasn't sent
+	 */
+	r = evldns_tcp_write_packet(req);
+	if (r == 0) {
+		struct timeval tv = { 10, 0 };
+		(void)event_del(req->event);
+		event_set(req->event, req->socket, EV_WRITE | EV_PERSIST,
+		  	evldns_tcp_write_callback, req);
+		if (event_add(req->event, &tv) < 0) {
+			// TODO: warn
+		}
+	} else if (r < 0) {
+		evldns_tcp_cleanup(req);
+	}
+}
+
+static int
+evldns_tcp_read_packet(evldns_server_request *req)
+{
+	int			 r;
+
+	/*
+	 * if this is a new message - read the two byte message header
+	 */
+	if (!req->wire_reqlen) {
+		uint16_t len = 0;
+
+		r = recv(req->socket, &len, sizeof(len), 0);
+		if (r < 0) {
+			if (errno == EAGAIN || errno == EINTR) {
+				return 0;
+			} else {
+				perror("recv");
+				return -1;
+			}
+		} else if (r == 0) {
+			return -1;
+		} else {
+			if (!len) return 1;	/* zero-length request */
+			req->wire_reqlen = len = ntohs(len);
+			req->wire_reqdone = 0;
+			req->wire_request = malloc(len);
+			if (!req->wire_request) {
+				perror("malloc");
+				return -1;
+			}
+		}
+	}
+
+	/*
+	 * the rest of the message might be available
+	 */
+	while (req->wire_reqdone < req->wire_reqlen) {
+		r = recv(req->socket, req->wire_request + req->wire_reqdone,
+		 	req->wire_reqlen - req->wire_reqdone, 0);
+		if (r < 0) {
+			if (errno == EAGAIN || errno == EINTR) {
+				return 0;
+			} else {
+				perror("recv");
+				return -1;
+			}
+		} else if (r == 0) {
+			return -1;
+		} else {
+			req->wire_reqdone += r;
+		}
+	}
+
+	/*
+	 * see if we've got the whole request now
+	 */
+	return (req->wire_reqdone >= req->wire_reqlen) ? 1 : 0;
+}
+
+static void
+evldns_tcp_read_callback(int fd, short events, void *arg)
+{
+	evldns_server_request *req = (evldns_server_request *)arg;
+	if (events == EV_TIMEOUT) {
+		evldns_tcp_cleanup(req);
+	} else if (events & EV_READ) {
+		int r = evldns_tcp_read_packet(req);
+		if (r < 0) {
+			evldns_tcp_cleanup(req);
+		} else if (r == 1) {
+			if (server_process_packet(req, req->wire_request, req->wire_reqlen) >= 0) {
+				evldns_tcp_write_queue(req);
+			}
+		}
+	}
+}
+
+static void
+evldns_tcp_write_callback(int fd, short events, void *arg)
+{
+	evldns_server_request *req = (evldns_server_request *)arg;
+	if (events == EV_TIMEOUT) {
+		evldns_tcp_cleanup(req);
+	} else if (events & EV_WRITE) {
+		if (evldns_tcp_write_packet(req) < 0) {
+			evldns_tcp_cleanup(req);
+		}
+	}
 }
 
 /*-------------------------------------------------------------------*/
 
 static void
-server_port_udp_callback(int fd, short events, void *arg)
+evldns_udp_callback(int fd, short events, void *arg)
 {
 	evldns_server_port *port = (evldns_server_port *)arg;
 
 	if (events & EV_READ) {
-		server_port_udp_read_callback(port);
+		evldns_udp_read_callback(port);
 	}
 	if (events & EV_WRITE) {
-		server_port_udp_write_callback(port);
+		evldns_udp_write_callback(port);
 	}
 }
 
@@ -220,9 +375,15 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 	evldns_server_port *port = req->port;
 	int		r;
 
-	r = sendto(req->socket, req->wire_response, req->wire_resplen, MSG_DONTWAIT,
+	/*
+	 * try and send the datagram immediately
+	 */
+	r = sendto(req->socket, req->wire_response, req->wire_resplen, 0,
 		   (struct sockaddr *) &req->addr, req->addrlen);
 
+	/*
+	 * if it failed, queue it for later
+	 */
 	if (r < 0) {
 		if (errno != EAGAIN) {
 			perror("sendto");
@@ -234,7 +395,7 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 			(void)event_del(port->event);
 			event_set(port->event, port->socket,
 				  (port->closing ? 0 : EV_READ) | EV_WRITE | EV_PERSIST,
-				  server_port_udp_callback, port);
+				  evldns_udp_callback, port);
 			if (event_add(port->event, NULL) < 0) {
 				// TODO: warn
 			}
@@ -243,27 +404,34 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 		return 1;
 	}
 
+	/*
+	 * dispose of the current request - only reached if the original send succeeds
+	 */
 	if (server_request_free(req)) {
 		return 0;
 	}
 
+	/*
+	 * and send anything else that happens to be in the queue
+	 */
 	if (!TAILQ_EMPTY(&port->pending)) {
-		server_port_udp_write_callback(port);
+		evldns_udp_write_callback(port);
 	}
 
 	return 0;
 }
 
 static void
-server_port_udp_read_callback(evldns_server_port *port)
+evldns_udp_read_callback(evldns_server_port *port)
 {
 	uint8_t buffer[LDNS_MAX_PACKETLEN];
 	while (1) {
 		evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: alloc check
 		req->addrlen = sizeof(struct sockaddr_storage);
 		req->socket = port->socket;
+		req->port = port;
 
-		int buflen = recvfrom(req->socket, buffer, sizeof(buffer), MSG_DONTWAIT,
+		int buflen = recvfrom(req->socket, buffer, sizeof(buffer), 0,
 				(struct sockaddr *)&req->addr, &req->addrlen);
 		if (buflen < 0) {
 			if (errno != EAGAIN) {
@@ -273,20 +441,19 @@ server_port_udp_read_callback(evldns_server_port *port)
 			return;
 		}
 
-		if (server_process_packet(buffer, buflen, port, req) >= 0) {
+		if (server_process_packet(req, buffer, buflen) >= 0) {
 			evldns_server_udp_write_queue(req);
 		}
 	}
 }
 
 static void
-server_port_udp_write_callback(evldns_server_port *port)
+evldns_udp_write_callback(evldns_server_port *port)
 {
 	struct evldns_server_request *req;
 	TAILQ_FOREACH(req, &port->pending, next) {
 
-		int r = sendto(port->socket, req->wire_response, req->wire_resplen,
-			MSG_DONTWAIT,
+		int r = sendto(port->socket, req->wire_response, req->wire_resplen, 0,
 			(struct sockaddr *)&req->addr, req->addrlen);
 
 		if (r < 0) {
@@ -305,7 +472,7 @@ server_port_udp_write_callback(evldns_server_port *port)
 	/* no more write events pending - go back to read-only mode */
 	(void)event_del(port->event);
 	event_set(port->event, port->socket, EV_READ | EV_PERSIST,
-		server_port_udp_callback, port);
+		evldns_udp_callback, port);
 	if (event_add(port->event, NULL) < 0) {
 		// TODO: warn
 	}
@@ -417,4 +584,46 @@ dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req)
 	}
 
 	ldns_rdf_deep_free(owner);
+}
+
+static int
+server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen)
+{
+	req->port->refcnt++;
+
+	/*
+	 * convert the received packet into ldns format
+	 */
+	if (ldns_wire2pkt(&req->request, buffer, buflen) != LDNS_STATUS_OK) {
+		return -1;
+	}
+
+	/*
+	 * send it to the callback chain
+	 */
+	dispatch_callbacks(&req->port->server->callbacks, req);
+
+	/*
+	 * if the callbacks didn't generate a wire-format response
+	 * then do the necessary stuff here
+	 */
+	if (!req->wire_response) {
+
+		/*
+		 * if the callbacks didn't even create an ldns format
+		 * response then return a default (REFUSED) ldns response
+		 */
+		if (!req->response) {
+			req->response = evldns_response(req->request,
+				LDNS_RCODE_REFUSED);
+		}
+
+		ldns_status status = ldns_pkt2wire(&req->wire_response,
+			req->response, &req->wire_resplen);
+		if (status != LDNS_STATUS_OK) {
+			return -1;
+		}
+	}
+
+	return 0;
 }
