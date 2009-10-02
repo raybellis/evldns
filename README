@@ -98,15 +98,16 @@ Please see "COPYING" for the full license details.
 TODO
 ----
 
-- Support for TCP/IP
+- Support for multiple response packets
 
-  TCP sockets must listen() and accept() before they can exchange data.
-  This will require additional libevent callbacks to handle those socket
-  level events, and only then can the data read/write callbacks be processed.
+  1.  Needed for AXFR
 
-- Make callbacks global rather than per-port (optionally?)
+  2.  Also for OARC style varying response length responsders,
+      where multiple packets of differing lengths are sent back
+      in response to a single inbound request
 
-  Currently serving via more than one socket requires the callback chain to
-  be registered once for each socket because the callback chain is part of
-  the 'evldns_server_port' structure.  This also breaks the module loading
-  model.
+- Support for deferred responses
+
+  So that queries can be intentionally delayed, or if for whatever
+  reason the framework is used in a system where response packets
+  cannot be immediately synthesised.
