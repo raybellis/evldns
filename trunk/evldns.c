@@ -138,7 +138,7 @@ evldns_close_server_port(evldns_server_port *port)
 static void
 evldns_tcp_accept_callback(int fd, short events, void *arg)
 {
-	struct timeval tv = { 10, 0 };
+	struct timeval tv = { 120, 0 };
 	evldns_server_port *port = (evldns_server_port *)arg;
 	evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: error check
 
@@ -171,7 +171,6 @@ evldns_tcp_write_packet(evldns_server_request *req)
 	 * send the two byte header
 	 */
 	if (!req->wire_resphead) {
-
 		uint16_t len = htons(req->wire_resplen);
 		r = send(req->socket, &len, sizeof(len), 0);
 		if (r < 0) {
@@ -208,13 +207,14 @@ evldns_tcp_write_packet(evldns_server_request *req)
 		}
 	}
 
+	/*
+  	 * if the whole packet has been sent without any errors set the
+  	 * socket back to read-only mode so that more requests can be
+  	 * received
+  	 */
 	if (req->wire_respdone >= req->wire_resplen) {
-		/*
-	 	 * if the whole packet has been sent without any errors set the
-	 	 * socket back to read-only mode so that more requests can be
-	 	 * received
-	 	 */
-		struct timeval tv = { 10, 0 };
+
+		struct timeval tv = { 120, 0 };
 		event_del(req->event);
 		event_set(req->event, req->socket, EV_READ | EV_PERSIST,
   		  	evldns_tcp_read_callback, req);
@@ -245,6 +245,7 @@ evldns_tcp_write_queue(evldns_server_request *req)
 	 * indicates that the two byte header needs to be written
 	 */
 	req->wire_resphead = 0;
+	req->wire_respdone = 0;
 
 	/*
 	 * send the packet, and leave libevent expecting more write events
@@ -252,7 +253,7 @@ evldns_tcp_write_queue(evldns_server_request *req)
 	 */
 	r = evldns_tcp_write_packet(req);
 	if (r == 0) {
-		struct timeval tv = { 10, 0 };
+		struct timeval tv = { 120, 0 };
 		(void)event_del(req->event);
 		event_set(req->event, req->socket, EV_WRITE | EV_PERSIST,
 		  	evldns_tcp_write_callback, req);
