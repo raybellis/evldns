@@ -288,6 +288,11 @@ evldns_tcp_read_packet(evldns_server_request *req)
 			return -1;
 		} else {
 			if (!len) return 1;	/* zero-length request */
+
+			/* get rid of any previous buffer */
+			free(req->wire_request);
+
+			/* set up the new buffers */
 			req->wire_reqlen = len = ntohs(len);
 			req->wire_reqdone = 0;
 			req->wire_request = malloc(len);
@@ -331,6 +336,7 @@ evldns_tcp_read_callback(int fd, short events, void *arg)
 	if (events == EV_TIMEOUT) {
 		evldns_tcp_cleanup(req);
 	} else if (events & EV_READ) {
+
 		int r = evldns_tcp_read_packet(req);
 		if (r < 0) {
 			evldns_tcp_cleanup(req);
@@ -593,6 +599,13 @@ server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen
 	req->port->refcnt++;
 
 	/*
+	 * dispose of the previous request if there's still one hanging around
+	 */
+	if (req->request) {
+		ldns_pkt_free(req->request);
+	}
+
+	/*
 	 * convert the received packet into ldns format
 	 */
 	if (ldns_wire2pkt(&req->request, buffer, buflen) != LDNS_STATUS_OK) {
@@ -619,6 +632,9 @@ server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen
 				LDNS_RCODE_REFUSED);
 		}
 
+		/*
+		 * convert from ldns format to wire format
+		 */
 		ldns_status status = ldns_pkt2wire(&req->wire_response,
 			req->response, &req->wire_resplen);
 		if (status != LDNS_STATUS_OK) {
