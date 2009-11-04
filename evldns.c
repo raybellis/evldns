@@ -599,7 +599,7 @@ server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen
 	req->port->refcnt++;
 
 	/*
-	 * dispose of the previous request if there's still one hanging around
+	 * dispose of the previous packet buffers if they're still around
 	 */
 	if (req->request) {
 		ldns_pkt_free(req->request);
