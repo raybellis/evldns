@@ -31,9 +31,9 @@
 #include <evldns.h>
 
 /*
- * This callback functions just returns a TXT record containing
- * whatever string value was passed in the 'user_data' parameter
- * when the callback was added.
+ * This callback functions just returns an A record containing
+ * the IP address that was passed in the 'user_data' parameter
+ * (as a string) when the callback was added.
  */
 static void a_callback(evldns_server_request *srq, void *user_data)
 {
