@@ -101,9 +101,9 @@ as112_zone *search_zones(ldns_rdf *qname, int *count)
 		} else {
 			/* attempt to parse the numeric labels */
 			ldns_rdf *label = ldns_dname_label(qname, *count);
-			char *ptr;
-			char *data = (char *)ldns_rdf_data(label);
-			char *str = data + 1, c1 = *str, c2;
+			uint8_t *data = ldns_rdf_data(label);
+			char *str = (char*)data + 1, *ptr;
+			uint8_t c1 = *str, c2;
 			octet = strtol(str, &ptr, 10);
 			c2 = *ptr;
 			ldns_rdf_deep_free(label);
