@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <ldns/ldns.h>
 
 void usage()
