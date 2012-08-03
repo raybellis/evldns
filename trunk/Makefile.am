@@ -11,7 +11,7 @@ MAINTAINERCLEANFILES = \
 	$(srcdir)/depcomp $(srcdir)/aclocal.m4 $(srcdir)/compile \
 	$(srcdir)/config.guess $(srcdir)/config.sub
 
-bin_PROGRAMS	= chaos as112d fixed testtcp
+bin_PROGRAMS	= chaos as112d oas112d fixed testtcp
 
 chaos_SOURCES	= chaos.c
 chaos_LDFLAGS	= -rdynamic -levldns -levent -lldns
@@ -19,11 +19,14 @@ chaos_LDFLAGS	= -rdynamic -levldns -levent -lldns
 as112d_SOURCES	= as112d.c
 as112d_LDFLAGS	= -rdynamic -levldns -levent -lldns
 
+oas112d_SOURCES	= oas112d.c
+oas112d_LDFLAGS	= -rdynamic -levldns -levent -lldns
+
 fixed_SOURCES	= fixed.c
 fixed_LDFLAGS	= -rdynamic -levldns -levent -lldns
 
 testtcp_SOURCES	= testtcp.c
-testtcp_LDFLAGS	= -lldns
+testtcp_LDFLAGS	= -rdynamic -lldns
 
 lib_LTLIBRARIES	= libevldns.la mod_mangler.la mod_txtrec.la mod_arec.la mod_myip.la
 
