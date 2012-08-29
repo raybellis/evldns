@@ -76,9 +76,6 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 	}
 
 	ldns_rr_new_frm_str(&soa, t_soa, 300, qname, NULL);
-	ldns_rr_new_frm_str(&ns1, t_ns1, 300, qname, NULL);
-	ldns_rr_new_frm_str(&ns2, t_ns2, 300, qname, NULL);
-
 	/* we need references to the response's sections */
 	answer = ldns_pkt_answer(resp);
 	authority = ldns_pkt_authority(resp);
@@ -90,8 +87,13 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 
 	/* NS */
 	if (qtype == LDNS_RR_TYPE_ANY || qtype == LDNS_RR_TYPE_NS) {
+ 	        ldns_rr_new_frm_str(&ns1, t_ns1, 300, qname, NULL);
+	        ldns_rr_new_frm_str(&ns2, t_ns2, 300, qname, NULL);
 		ldns_rr_list_push_rr(answer, ldns_rr_clone(ns1));
 		ldns_rr_list_push_rr(answer, ldns_rr_clone(ns2));
+		ldns_rr_free(ns1);
+		ldns_rr_free(ns2);
+
 	}
 
 	/* fill authority section if NODATA */
@@ -104,12 +106,11 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 
 	/* clean up a bit */
 	ldns_rr_free(soa);
-	ldns_rr_free(ns1);
-	ldns_rr_free(ns2);
 
 	/* update packet header */
 	ldns_pkt_set_aa(resp, 1);
 }
+
 
 int main(int argc, char *argv[])
 {
