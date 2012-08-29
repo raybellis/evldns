@@ -33,7 +33,7 @@
 #include <ctype.h>
 #include <evldns.h>
 
-static char *t_soa = "@ SOA a.as112.net. hostmaster.root-servers.org. 2002040800 1800 900 0604800 604800";
+static char *t_soa = "@ SOA a.as112.net. hostmaster.as112.net. 1 604800 2592000 0604800 604800";
 static char *t_ns1 = "@ NS b.as112.net.";
 static char *t_ns2 = "@ NS c.as112.net.";
 
@@ -55,20 +55,34 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 {
 	/* copy the question and determine qtype and qname */
 	ldns_pkt *req = srq->request;
-	ldns_pkt *resp = srq->response = evldns_response(req, LDNS_RCODE_REFUSED);
+
+	/* the default response packet */
+	ldns_pkt *resp = srq->response = evldns_response(req, LDNS_RCODE_NOERROR);
+
+	/* copy the question and determine qtype and qname */
 	ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(req), 0);
 	ldns_rr_type qtype = ldns_rr_get_type(question);
 	ldns_rdf *qname = ldns_rr_owner(question);
+
+	/* misc local variables */
+	ldns_rr_list *answer, *authority;
 	ldns_rr *soa, *ns1, *ns2;
 	int ancount = 0;
 
-	/* misc local variables */
-	ldns_rr_list *answer = ldns_pkt_answer(resp);
+	/* we do not support zone transfers */
+	if (qtype == LDNS_RR_TYPE_AXFR || qtype == LDNS_RR_TYPE_IXFR) {
+		ldns_pkt_set_rcode(resp, LDNS_RCODE_NOTIMPL);
+		return;
+	}
 
 	ldns_rr_new_frm_str(&soa, t_soa, 300, qname, NULL);
 	ldns_rr_new_frm_str(&ns1, t_ns1, 300, qname, NULL);
 	ldns_rr_new_frm_str(&ns2, t_ns2, 300, qname, NULL);
 
+	/* we need references to the response's sections */
+	answer = ldns_pkt_answer(resp);
+	authority = ldns_pkt_authority(resp);
+	
 	/* SOA */
 	if (qtype == LDNS_RR_TYPE_ANY || qtype == LDNS_RR_TYPE_SOA) {
 		ldns_rr_list_push_rr(answer, ldns_rr_clone(soa));
@@ -80,20 +94,15 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 		ldns_rr_list_push_rr(answer, ldns_rr_clone(ns2));
 	}
 
-	ancount = ldns_rr_list_rr_count(answer);
-	if (ancount) {
-		ldns_pkt_set_rcode(resp, LDNS_RCODE_NOERROR);
-	} else {
-		ldns_pkt_set_rcode(resp, LDNS_RCODE_NXDOMAIN);
-	}
-
 	/* fill authority section if NODATA */
+	ancount = ldns_rr_list_rr_count(answer);
 	ldns_pkt_set_ancount(resp, ancount);
 	if (!ancount) {
-		ldns_rr_list_push_rr(ldns_pkt_authority(resp), ldns_rr_clone(soa));
+		ldns_rr_list_push_rr(authority, ldns_rr_clone(soa));
 		ldns_pkt_set_nscount(resp, 1);
 	}
 
+	/* clean up a bit */
 	ldns_rr_free(soa);
 	ldns_rr_free(ns1);
 	ldns_rr_free(ns2);
@@ -101,6 +110,7 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 	/* update packet header */
 	ldns_pkt_set_aa(resp, 1);
 }
+
 int main(int argc, char *argv[])
 {
 	struct evldns_server		*p;
