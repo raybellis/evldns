@@ -6,14 +6,14 @@
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of Nominet UK nor the names of its contributors may
- *       be used to endorse or promote products derived from this software
- *       without specific prior written permission.
+ *	 * Redistributions of source code must retain the above copyright
+ *	   notice, this list of conditions and the following disclaimer.
+ *	 * Redistributions in binary form must reproduce the above copyright
+ *	   notice, this list of conditions and the following disclaimer in the
+ *	   documentation and/or other materials provided with the distribution.
+ *	 * Neither the name of Nominet UK nor the names of its contributors may
+ *	   be used to endorse or promote products derived from this software
+ *	   without specific prior written permission.
  * 
  * THIS SOFTWARE IS PROVIDED BY Nominet UK ''AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -75,42 +75,36 @@ void as112_callback(evldns_server_request *srq, void *user_data)
 		return;
 	}
 
-	ldns_rr_new_frm_str(&soa, t_soa, 300, qname, NULL);
 	/* we need references to the response's sections */
 	answer = ldns_pkt_answer(resp);
 	authority = ldns_pkt_authority(resp);
-	
+
 	/* SOA */
 	if (qtype == LDNS_RR_TYPE_ANY || qtype == LDNS_RR_TYPE_SOA) {
-		ldns_rr_list_push_rr(answer, ldns_rr_clone(soa));
+		ldns_rr_new_frm_str(&soa, t_soa, 300, qname, NULL);
+		ldns_rr_list_push_rr(answer, soa);
 	}
 
 	/* NS */
 	if (qtype == LDNS_RR_TYPE_ANY || qtype == LDNS_RR_TYPE_NS) {
- 	        ldns_rr_new_frm_str(&ns1, t_ns1, 300, qname, NULL);
-	        ldns_rr_new_frm_str(&ns2, t_ns2, 300, qname, NULL);
-		ldns_rr_list_push_rr(answer, ldns_rr_clone(ns1));
-		ldns_rr_list_push_rr(answer, ldns_rr_clone(ns2));
-		ldns_rr_free(ns1);
-		ldns_rr_free(ns2);
-
+ 		ldns_rr_new_frm_str(&ns1, t_ns1, 300, qname, NULL);
+		ldns_rr_new_frm_str(&ns2, t_ns2, 300, qname, NULL);
+		ldns_rr_list_push_rr(answer, ns1);
+		ldns_rr_list_push_rr(answer, ns2);
 	}
 
-	/* fill authority section if NODATA */
+	/* if NODATA fill authority section with an SOA */
 	ancount = ldns_rr_list_rr_count(answer);
 	ldns_pkt_set_ancount(resp, ancount);
 	if (!ancount) {
-		ldns_rr_list_push_rr(authority, ldns_rr_clone(soa));
+		ldns_rr_new_frm_str(&soa, t_soa, 300, qname, NULL);
+		ldns_rr_list_push_rr(authority, soa);
 		ldns_pkt_set_nscount(resp, 1);
 	}
-
-	/* clean up a bit */
-	ldns_rr_free(soa);
 
 	/* update packet header */
 	ldns_pkt_set_aa(resp, 1);
 }
-
 
 int main(int argc, char *argv[])
 {
