@@ -35,7 +35,7 @@
  * whatever string value was passed in the 'user_data' parameter
  * when the callback was added.
  */
-static void txt_callback(evldns_server_request *srq, void *user_data)
+static void txt_callback(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	ldns_pkt *req = srq->request;
 	ldns_pkt *resp = evldns_response(req, LDNS_RCODE_NOERROR);

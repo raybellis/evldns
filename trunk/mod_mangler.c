@@ -42,7 +42,7 @@
  * NB: user_data should be passed directly as an integer,
  * not as a pointer to an integer
  */
-static void bitflip(evldns_server_request *srq, void *user_data)
+static void bitflip(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	int		n_bits = (int)(long)user_data;
 	int		i;

@@ -79,7 +79,7 @@ struct evldns_server_request {
 };
 typedef struct evldns_server_request evldns_server_request;
 
-typedef void (*evldns_callback)(evldns_server_request *request, void *data);
+typedef void (*evldns_callback)(evldns_server_request *request, void *data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass);
 typedef int (*evldns_plugin_init)(struct evldns_server *p);
 
 /*
