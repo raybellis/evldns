@@ -32,14 +32,14 @@
 #include <stdio.h>
 #include <evldns.h>
 
-void nxdomain(evldns_server_request *srq, void *user_data)
+void nxdomain(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	ldns_pkt *req = srq->request;
 	srq->response = evldns_response(req, LDNS_RCODE_NXDOMAIN);
 }
 
 /* rejects packets that arrive with QR=1, or OPCODE != QUERY, or QDCOUNT != 1 */
-void query_only(evldns_server_request *srq, void *user_data)
+void query_only(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	ldns_pkt *req = srq->request;
 
@@ -78,8 +78,8 @@ int main(int argc, char *argv[])
 	/* register a list of callbacks */
 	evldns_add_callback(p, NULL, LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, query_only, NULL);
 	evldns_add_callback(p, "client.bind", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, myip, NULL);
-	evldns_add_callback(p, "version.bind", LDNS_RR_CLASS_CH, LDNS_RR_TYPE_TXT, txt, "evldns-0.1");
-	evldns_add_callback(p, "author.bind", LDNS_RR_CLASS_CH, LDNS_RR_TYPE_TXT, txt, "Ray Bellis, Advanced Projects, Nominet UK");
+	evldns_add_callback(p, "version.bind", LDNS_RR_CLASS_CH, LDNS_RR_TYPE_TXT, txt, "evldns-0.2");
+	evldns_add_callback(p, "author.bind", LDNS_RR_CLASS_CH, LDNS_RR_TYPE_TXT, txt, "Ray Bellis, R&D Nominet UK");
 	evldns_add_callback(p, "*", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, nxdomain, NULL);
 
 	/* and set it running */

@@ -47,13 +47,11 @@
  * If the question is "qname IN ANY" then both the TXT
  * and A records are returned.
  */
-static void myip_callback(evldns_server_request *srq, void *user_data)
+static void myip_callback(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	ldns_pkt *req = srq->request;
 	ldns_pkt *resp = evldns_response(req, LDNS_RCODE_NOERROR);
 	ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(req), 0);
-	ldns_rr_type qtype = ldns_rr_get_type(question);
-	ldns_rr_type qclass = ldns_rr_get_class(question);
 	ldns_rr_list *answer = ldns_pkt_answer(resp);
 
 	/* generate TXT records for client address */

@@ -38,7 +38,7 @@ static char *t_ns1 = "@ NS b.as112.net.";
 static char *t_ns2 = "@ NS c.as112.net.";
 
 /* rejects packets that arrive with QR=1, or OPCODE != QUERY, or QDCOUNT != 1 */
-void query_only(evldns_server_request *srq, void *user_data)
+void query_only(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	ldns_pkt *req = srq->request;
 
@@ -51,18 +51,10 @@ void query_only(evldns_server_request *srq, void *user_data)
 	}
 }
 
-void as112_callback(evldns_server_request *srq, void *user_data)
+void as112_callback(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
-	/* copy the question and determine qtype and qname */
-	ldns_pkt *req = srq->request;
-
 	/* the default response packet */
-	ldns_pkt *resp = srq->response = evldns_response(req, LDNS_RCODE_NOERROR);
-
-	/* copy the question and determine qtype and qname */
-	ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(req), 0);
-	ldns_rr_type qtype = ldns_rr_get_type(question);
-	ldns_rdf *qname = ldns_rr_owner(question);
+	ldns_pkt *resp = srq->response = evldns_response(srq->request, LDNS_RCODE_NOERROR);
 
 	/* misc local variables */
 	ldns_rr_list *answer, *authority;

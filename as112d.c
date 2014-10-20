@@ -134,7 +134,7 @@ as112_zone *search_zones(ldns_rdf *qname, int *count)
 }
 
 /* rejects packets that arrive with QR=1, or OPCODE != QUERY, or QDCOUNT != 1 */
-void query_only(evldns_server_request *srq, void *user_data)
+void query_only(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	ldns_pkt *req = srq->request;
 
@@ -147,14 +147,11 @@ void query_only(evldns_server_request *srq, void *user_data)
 	}
 }
 
-void as112_callback(evldns_server_request *srq, void *user_data)
+void as112_callback(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	/* copy the question and determine qtype and qname */
 	ldns_pkt *req = srq->request;
 	ldns_pkt *resp = srq->response = evldns_response(req, LDNS_RCODE_REFUSED);
-	ldns_rr *question = ldns_rr_list_rr(ldns_pkt_question(req), 0);
-	ldns_rr_type qtype = ldns_rr_get_type(question);
-	ldns_rdf *qname = ldns_rr_owner(question);
 
 	/* misc local variables */
 	ldns_rr_list *answer = ldns_pkt_answer(resp);
