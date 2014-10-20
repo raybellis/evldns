@@ -11,6 +11,8 @@ MAINTAINERCLEANFILES = \
 	$(srcdir)/depcomp $(srcdir)/aclocal.m4 $(srcdir)/compile \
 	$(srcdir)/config.guess $(srcdir)/config.sub
 
+include_HEADERS = evldns.h
+
 bin_PROGRAMS	= chaos as112d oas112d fixed
 
 chaos_SOURCES	= chaos.c
