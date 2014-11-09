@@ -45,23 +45,23 @@ typedef struct evldns_server evldns_server;
 
 struct evldns_server_port {
 	TAILQ_ENTRY(evldns_server_port)	 next;
-	evldns_server			*server;
-	int				 socket;
-	int				 refcnt;
-	struct event			*event;
+	evldns_server					*server;
+	int								 socket;
+	int								 refcnt;
+	struct event					*event;
 	TAILQ_HEAD(evldnssrq, evldns_server_request) pending;
-	int				 is_tcp:1;
-	int				 closing:1;
+	int								 is_tcp:1;
+	int								 closing:1;
 };
 typedef struct evldns_server_port evldns_server_port;
 
 struct evldns_cb {
-	TAILQ_ENTRY(evldns_cb)		 next;
-	ldns_rdf			*rdf;
-	ldns_rr_type			 rr_type;
-	ldns_rr_class			 rr_class;
-	evldns_callback			 callback;
-	void				*data;
+	TAILQ_ENTRY(evldns_cb)			 next;
+	ldns_rdf						*rdf;
+	ldns_rr_type					 rr_type;
+	ldns_rr_class					 rr_class;
+	evldns_callback					 callback;
+	void							*data;
 };
 typedef struct evldns_cb evldns_cb;
 
