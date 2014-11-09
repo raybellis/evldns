@@ -75,6 +75,7 @@ struct evldns_server_request {
 
 	/* misc flags */
 	uint8_t						 wire_resphead:1;
+	uint8_t						 is_tcp:1;
 
 	/* pending requests for UDP mode */
 	TAILQ_ENTRY(evldns_server_request) next;
