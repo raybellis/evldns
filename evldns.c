@@ -145,6 +145,7 @@ evldns_tcp_accept_callback(int fd, short events, void *arg)
 	req->port = port;
 	req->addrlen = sizeof(struct sockaddr_storage);
 	req->socket = accept(fd, (struct sockaddr *)&req->addr, &req->addrlen);
+	req->is_tcp = 1;
 
 	/* create event on new socket and register that event */
 	req->event = calloc(1, sizeof(struct event)); // TODO: error check
