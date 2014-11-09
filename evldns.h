@@ -52,27 +52,29 @@ struct evldns_server_request {
 	struct evldns_server_port	*port;
 
 	/* current socket and (optional) event object */
-	int				 socket;
-	struct event			*event;
+	int							 socket;
+	struct event				*event;
 
 	/* the client's address */
 	struct sockaddr_storage		 addr;
-	socklen_t			 addrlen;
+	socklen_t					 addrlen;
 
 	/* formatted DNS packets */
-	ldns_pkt			*request;
-	ldns_pkt			*response;
+	ldns_pkt					*request;
+	ldns_pkt					*response;
 
 	/* unformatted request data */
-	uint8_t				*wire_request;
-	uint16_t			 wire_reqlen;
-	uint16_t			 wire_reqdone;
+	uint8_t						*wire_request;
+	uint16_t					 wire_reqlen;
+	uint16_t					 wire_reqdone;
 
 	/* unformatted response data */
-	uint8_t				*wire_response;
-	size_t				 wire_resplen;
-	size_t				 wire_respdone;
-	uint8_t				 wire_resphead:1;
+	uint8_t						*wire_response;
+	size_t						 wire_resplen;
+	size_t						 wire_respdone;
+
+	/* misc flags */
+	uint8_t						 wire_resphead:1;
 
 	/* pending requests for UDP mode */
 	TAILQ_ENTRY(evldns_server_request) next;
