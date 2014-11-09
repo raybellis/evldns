@@ -100,6 +100,8 @@ extern void evldns_add_function(const char *name, evldns_callback func);
 extern evldns_callback evldns_get_function(const char *name);
 
 /* miscellaneous utility functions */
+extern int bind_to_address(struct sockaddr *addr, socklen_t addrlen, int type, int backlog);
+extern int bind_to_port(int port, int family, int type, int backlog);
 extern int bind_to_udp4_port(int port);
 extern int bind_to_udp6_port(int port);
 extern int bind_to_tcp4_port(int port, int backlog);
