@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <evldns.h>
 
-/* rejects packets that arrive with QR=1, or OPCODE != QUERY, or QDCOUNT != 1 */
+/* rejects packets that arrive with OPCODE != QUERY, or QDCOUNT != 1 */
 void query_only(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ldns_rr_type qtype, ldns_rr_class qclass)
 {
 	ldns_pkt *req = srq->request;
@@ -41,7 +41,7 @@ void query_only(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ld
 		srq->response = evldns_response(req, LDNS_RCODE_NOTIMPL);
 	}
 
-	if (ldns_pkt_qr(req) || ldns_pkt_qdcount(req) != 1) {
+	if (ldns_pkt_qdcount(req) != 1) {
 		srq->response = evldns_response(req, LDNS_RCODE_FORMERR);
 	}
 }
