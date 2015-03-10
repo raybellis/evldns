@@ -611,6 +611,13 @@ server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen
 	}
 
 	/*
+	 * don't respond to responses
+	 */
+	if (ldns_pkt_qr(req->request)) {
+		return -1;
+	}
+
+	/*
 	 * send it to the callback chain
 	 */
 	dispatch_callbacks(&req->port->server->callbacks, req);
