@@ -90,7 +90,7 @@ typedef int (*evldns_plugin_init)(struct evldns_server *p);
  */
 
 /* core evdns sort-of-clone functions */
-struct evldns_server *evldns_add_server();
+struct evldns_server *evldns_add_server(struct event_base *);
 struct evldns_server_port *evldns_add_server_port(struct evldns_server *, int socket);
 void evldns_server_close(struct evldns_server_port *port);
 void evldns_add_callback(struct evldns_server *server, const char *dname, ldns_rr_class rr_class, ldns_rr_type rr_type, evldns_callback callback, void *data);

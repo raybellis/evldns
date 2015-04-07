@@ -54,14 +54,15 @@ void query_only(evldns_server_request *srq, void *user_data, ldns_rdf *qname, ld
 
 int main(int argc, char *argv[])
 {
+	struct event_base			*base;
 	struct evldns_server		*p;
-	evldns_callback			 myip, txt;
+	evldns_callback				 myip, txt;
 
-	event_init();
+	base = event_base_new();
 	evldns_init();
 
 	/* create an evldns server context */
-	p = evldns_add_server();
+	p = evldns_add_server(base);
 
 	/* create sockets and add them to the context */
 	evldns_add_server_port(p, bind_to_udp4_port(5053));
@@ -83,7 +84,7 @@ int main(int argc, char *argv[])
 	evldns_add_callback(p, "*", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, nxdomain, NULL);
 
 	/* and set it running */
-	event_dispatch();
+	event_base_dispatch(base);
 
 	return EXIT_SUCCESS;
 }

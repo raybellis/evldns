@@ -39,6 +39,7 @@
 #include <evldns.h>
 
 struct evldns_server {
+	struct event_base				*base;
 	TAILQ_HEAD(evldnscbq, evldns_cb) callbacks;
 };
 typedef struct evldns_server evldns_server;
@@ -79,12 +80,13 @@ static int server_request_free(evldns_server_request *req);
 static int server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen);
 
 /* exported function */
-struct evldns_server *evldns_add_server()
+struct evldns_server *evldns_add_server(struct event_base *base)
 {
 	evldns_server *server;
 	if (!(server = calloc(1, sizeof(*server)))) {
 		return NULL;
 	}
+	server->base = base;
 	TAILQ_INIT(&server->callbacks);
 
 	return server;
@@ -107,7 +109,6 @@ evldns_add_server_port(struct evldns_server *server, int socket)
 	/* and populate it */
 	port->server = server;
 	port->socket = socket;
-	port->event = calloc(1, sizeof(struct event)); // TODO: errorcheck
 	port->refcnt = 1;
 	port->is_tcp = socket_is_tcp(socket);
 
@@ -118,7 +119,9 @@ evldns_add_server_port(struct evldns_server *server, int socket)
 		callback = evldns_udp_callback;
 		TAILQ_INIT(&port->pending);		// only needed for UDP
 	}
-	event_set(port->event, port->socket, EV_READ | EV_PERSIST, callback, port);
+
+	port->event = event_new(port->server->base, port->socket,
+		EV_READ | EV_PERSIST, callback, port);
 	event_add(port->event, NULL);
 
 	return port;
@@ -148,8 +151,7 @@ evldns_tcp_accept_callback(int fd, short events, void *arg)
 	req->is_tcp = 1;
 
 	/* create event on new socket and register that event */
-	req->event = calloc(1, sizeof(struct event)); // TODO: error check
-	event_set(req->event, req->socket, EV_READ | EV_PERSIST,
+	req->event = event_new(req->port->server->base, req->socket, EV_READ | EV_PERSIST,
 			evldns_tcp_read_callback, req);
 	event_add(req->event, &tv);
 }
@@ -216,9 +218,9 @@ evldns_tcp_write_packet(evldns_server_request *req)
 	if (req->wire_respdone >= req->wire_resplen) {
 
 		struct timeval tv = { 120, 0 };
-		event_del(req->event);
-		event_set(req->event, req->socket, EV_READ | EV_PERSIST,
-  		  	evldns_tcp_read_callback, req);
+		(void)event_del(req->event);
+		(void)event_assign(req->event, req->port->server->base, req->socket,
+			EV_READ | EV_PERSIST, evldns_tcp_read_callback, req);
 		if (event_add(req->event, &tv) < 0) {
 			// TODO: warn
 		}
@@ -256,8 +258,8 @@ evldns_tcp_write_queue(evldns_server_request *req)
 	if (r == 0) {
 		struct timeval tv = { 120, 0 };
 		(void)event_del(req->event);
-		event_set(req->event, req->socket, EV_WRITE | EV_PERSIST,
-		  	evldns_tcp_write_callback, req);
+		(void)event_assign(req->event, req->port->server->base, req->socket,
+			EV_WRITE | EV_PERSIST, evldns_tcp_write_callback, req);
 		if (event_add(req->event, &tv) < 0) {
 			// TODO: warn
 		}
@@ -401,7 +403,7 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 		TAILQ_INSERT_TAIL(&port->pending, req, next);
 		if (TAILQ_FIRST(&port->pending) == req) {
 			(void)event_del(port->event);
-			event_set(port->event, port->socket,
+			(void)event_assign(port->event, port->server->base, port->socket,
 				  (port->closing ? 0 : EV_READ) | EV_WRITE | EV_PERSIST,
 				  evldns_udp_callback, port);
 			if (event_add(port->event, NULL) < 0) {
@@ -479,8 +481,8 @@ evldns_udp_write_callback(evldns_server_port *port)
 
 	/* no more write events pending - go back to read-only mode */
 	(void)event_del(port->event);
-	event_set(port->event, port->socket, EV_READ | EV_PERSIST,
-		evldns_udp_callback, port);
+	(void)event_assign(port->event, port->server->base, port->socket,
+		EV_READ | EV_PERSIST, evldns_udp_callback, port);
 	if (event_add(port->event, NULL) < 0) {
 		// TODO: warn
 	}

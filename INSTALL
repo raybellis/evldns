@@ -4,7 +4,7 @@ Pre-requisites
 ldns 1.5.0 or later
 	http://www.nlnetlabs.nl/projects/ldns/
 
-libevent 1.4.9 or later (may work with earlier versions, but untested)
+libevent 2.0.0 or later
 	http://monkey.org/~provos/libevent/
 
 Building

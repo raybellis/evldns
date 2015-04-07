@@ -4,7 +4,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([evldns],[0.1],[ray@nominet.org.uk])
+AC_INIT([evldns],[0.2],[ray@bellis.me.uk])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE(foreign)
 
@@ -45,7 +45,7 @@ LDFLAGS="$AM_LDFLAGS $LDFLAGS"
 AC_CHECK_LIB([ldns], [ldns_dname_match_wildcard], [],
 	     AC_MSG_ERROR([libdns unuseable])
 )
-AC_CHECK_LIB([event], [event_init])
+AC_CHECK_LIB([event], [event_base_new])
 
 # restore user flags
 CPPFLAGS="$OLDCPPFLAGS"

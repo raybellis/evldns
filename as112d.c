@@ -191,16 +191,17 @@ void as112_callback(evldns_server_request *srq, void *user_data, ldns_rdf *qname
 }
 int main(int argc, char *argv[])
 {
+	struct event_base			*base;
 	struct evldns_server		*p;
 
 	create_zones();
-	event_init();
-	p = evldns_add_server();
+	base = event_base_new();
+	p = evldns_add_server(base);
 	evldns_add_server_port(p, bind_to_udp4_port(5053));
 	evldns_add_server_port(p, bind_to_tcp4_port(5053, 10));
 	evldns_add_callback(p, NULL, LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, query_only, NULL);
 	evldns_add_callback(p, "*.in-addr.arpa.", LDNS_RR_CLASS_ANY, LDNS_RR_TYPE_ANY, as112_callback, NULL);
-	event_dispatch();
+	event_base_dispatch(base);
 
 	return EXIT_SUCCESS;
 }
