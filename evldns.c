@@ -33,6 +33,7 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/uio.h>
 #include <sys/queue.h>
 #include <arpa/inet.h>
 
@@ -170,23 +171,35 @@ static int
 evldns_tcp_write_packet(evldns_server_request *req)
 {
 	int		r;
+
 	/*
-	 * send the two byte header
+	 * send the two byte header coalesced with data if possible
 	 */
-	if (!req->wire_resphead) {
+	if (req->wire_resphead < 2) {
+		struct iovec iov[2];
 		uint16_t len = htons(req->wire_resplen);
-		r = send(req->socket, &len, sizeof(len), 0);
+
+		iov[0].iov_base = &len + req->wire_resphead;
+		iov[0].iov_len = sizeof(len) - req->wire_resphead;
+
+		iov[1].iov_base = req->wire_response;
+		iov[1].iov_len = req->wire_resplen;
+
+		r = writev(req->socket, &iov[0], 2);
 		if (r < 0) {
 			if (errno == EAGAIN || errno == EINTR) {
 				return 0;
 			} else {
-				perror("send");
+				perror("writev");
 				return -1;
 			}
 		} else if (r == 0) {
 			return 0;
-		} else {
+		} else if (r == 1) {
 			req->wire_resphead = 1;
+		} else if (r >= 2) {
+			req->wire_resphead = 2;
+			req->wire_respdone = req->wire_resplen - r - 2;
 		}
 	}
 
@@ -194,13 +207,13 @@ evldns_tcp_write_packet(evldns_server_request *req)
 	 * send as much of the rest of the packet as possible
 	 */
 	while (req->wire_respdone < req->wire_resplen) {
-		r = send(req->socket, req->wire_response + req->wire_respdone,
-		     	req->wire_resplen - req->wire_respdone, 0);
+		r = write(req->socket, req->wire_response + req->wire_respdone,
+		     	req->wire_resplen - req->wire_respdone);
 		if (r < 0) {
 			if (errno == EAGAIN || errno == EINTR) {
 				return 0;
 			} else {
-				perror("send");
+				perror("write");
 				return -1;
 			}
 		} else if (r == 0) {
@@ -217,6 +230,19 @@ evldns_tcp_write_packet(evldns_server_request *req)
   	 */
 	if (req->wire_respdone >= req->wire_resplen) {
 
+		/*
+		 * set up the request object reader to receive another
+		 * request - without this it'll loop
+		 */
+		ldns_pkt_free(req->response);
+		if (req->wire_response) {
+			free(req->wire_response);
+		}
+		req->response = 0;
+		req->wire_response = 0;
+		req->wire_reqdone = 0;
+		req->wire_reqlen = 0;
+
 		struct timeval tv = { 120, 0 };
 		(void)event_del(req->event);
 		(void)event_assign(req->event, req->port->server->base, req->socket,
@@ -224,13 +250,6 @@ evldns_tcp_write_packet(evldns_server_request *req)
 		if (event_add(req->event, &tv) < 0) {
 			// TODO: warn
 		}
-
-		/*
-		 * set up the request object reader to receive another
-		 * request - without this it'll loop
-		 */
-		req->wire_reqdone = 0;
-		req->wire_reqlen = 0;
 
 		return 1;
 	} else {
@@ -291,7 +310,6 @@ evldns_tcp_read_packet(evldns_server_request *req)
 			return -1;
 		} else {
 			if (!len) return 1;	/* zero-length request */
-
 			/* get rid of any previous buffer */
 			free(req->wire_request);
 
@@ -339,7 +357,6 @@ evldns_tcp_read_callback(int fd, short events, void *arg)
 	if (events == EV_TIMEOUT) {
 		evldns_tcp_cleanup(req);
 	} else if (events & EV_READ) {
-
 		int r = evldns_tcp_read_packet(req);
 		if (r < 0) {
 			evldns_tcp_cleanup(req);
@@ -603,6 +620,7 @@ server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen
 	 */
 	if (req->request) {
 		ldns_pkt_free(req->request);
+		req->request = 0;
 	}
 
 	/*
