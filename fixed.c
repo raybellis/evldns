@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
 	p = evldns_add_server(base);
 
 	/* create sockets and add them to the context */
-	evldns_add_server_port(p, bind_to_udp4_port(5053));
+	evldns_add_server_all(p, NULL, "5053", 10);
 
 	/* load a couple of plugins */
 	evldns_load_plugin(p, ".libs/mod_arec.so");

@@ -96,6 +96,9 @@ void evldns_server_close(struct evldns_server_port *port);
 void evldns_add_callback(struct evldns_server *server, const char *dname, ldns_rr_class rr_class, ldns_rr_type rr_type, evldns_callback callback, void *data);
 ldns_pkt *evldns_response(const ldns_pkt *request, ldns_pkt_rcode rcode);
 
+/* not-core network function - binds to everything possible  */
+extern int evldns_add_server_all(struct evldns_server *server, const char *ipaddr, const char *port, int backlog);
+
 /* plugin and function handling functions */
 extern void evldns_init(void);
 extern int evldns_load_plugin(struct evldns_server *server, const char *plugin);
@@ -103,7 +106,10 @@ extern void evldns_add_function(const char *name, evldns_callback func);
 extern evldns_callback evldns_get_function(const char *name);
 
 /* miscellaneous utility functions */
-extern int bind_to_address(struct sockaddr *addr, socklen_t addrlen, int type, int backlog);
+extern int bind_to_sockaddr(struct sockaddr *addr, socklen_t addrlen, int type, int backlog);
+extern int bind_to_address(const char *addr, const char *port, int type, int backlog);
+extern int bind_to_udp_address(const char *addr, const char *port);
+extern int bind_to_tcp_address(const char *addr, const char *port, int backlog);
 extern int bind_to_port(int port, int family, int type, int backlog);
 extern int bind_to_udp4_port(int port);
 extern int bind_to_udp6_port(int port);

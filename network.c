@@ -37,10 +37,11 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <evldns.h>
 
 /*--------------------------------------------------------------------*/
 
-int bind_to_address(struct sockaddr* addr, socklen_t addrlen, int type, int backlog)
+int bind_to_sockaddr(struct sockaddr* addr, socklen_t addrlen, int type, int backlog)
 {
 	int					 r, s;
 	int					 reuse = 1;
@@ -99,7 +100,7 @@ int bind_to_port(int port, int family, int type, int backlog)
 		addr.sin_family = family;
 		addr.sin_addr.s_addr = INADDR_ANY;
 		addr.sin_port = htons(port);
-		return bind_to_address((struct sockaddr *)&addr, sizeof(addr), type, backlog);
+		return bind_to_sockaddr((struct sockaddr *)&addr, sizeof(addr), type, backlog);
 	} else if (family == AF_INET6) {
 		struct sockaddr_in6		addr;
 		memset(&addr, 0, sizeof(addr));
@@ -107,11 +108,47 @@ int bind_to_port(int port, int family, int type, int backlog)
 		addr.sin6_family = AF_INET6;
 		addr.sin6_addr = in6addr_any;
 		addr.sin6_port = htons(port);
-		return bind_to_address((struct sockaddr *)&addr, sizeof(addr), type, backlog);
+		return bind_to_sockaddr((struct sockaddr *)&addr, sizeof(addr), type, backlog);
 	} else {
 		fprintf(stderr, "address family not recognized\n");
 		return -1;
 	}
+}
+
+int bind_to_address(const char *ipaddr, const char *port, int type, int backlog)
+{
+	struct sockaddr_storage	addr;
+	int						addrlen;
+	struct addrinfo			hints, *ai;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_flags = AI_PASSIVE;
+
+	int res = getaddrinfo(ipaddr, port, &hints, &ai);
+	if (res) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+		return -1;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addrlen = ai->ai_addrlen;
+	memcpy(&addr, ai->ai_addr, addrlen);
+	freeaddrinfo(ai);
+
+	return bind_to_sockaddr((struct sockaddr  *)&addr, addrlen, type, backlog);
+}
+
+/*--------------------------------------------------------------------*/
+
+int bind_to_udp_address(const char *ipaddr, const char *port)
+{
+	return bind_to_address(ipaddr, port, SOCK_DGRAM, 0);
+}
+
+int bind_to_tcp_address(const char *ipaddr, const char *port, int backlog)
+{
+	return bind_to_address(ipaddr, port, SOCK_STREAM, backlog);
 }
 
 /*--------------------------------------------------------------------*/
@@ -148,4 +185,43 @@ int socket_is_tcp(int fd)
 	getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &typelen);
 
 	return (type == SOCK_STREAM);
+}
+
+/*--------------------------------------------------------------------*/
+
+int evldns_add_server_all(struct evldns_server *server, const char *ipaddr, const char *port, int backlog)
+{
+	struct sockaddr_storage	addr;
+	struct addrinfo			hints, *ai, *ai0;
+	int						errors = 0;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_flags = AI_ADDRCONFIG | AI_PASSIVE;
+
+	int res = getaddrinfo(ipaddr, port, &hints, &ai);
+	if (res) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+		return -1;
+	}
+
+	ai0 = ai;
+	while (ai) {
+		int addrlen = ai->ai_addrlen;
+		memset(&addr, 0, sizeof(addr));
+		memcpy(&addr, ai->ai_addr, addrlen);
+
+		int fd = bind_to_sockaddr((struct sockaddr *)&addr, addrlen, ai->ai_socktype, backlog);
+		if (fd >= 0) {
+			evldns_add_server_port(server, fd);
+		} else {
+			++errors;
+		}
+
+		ai = ai->ai_next;
+	}
+
+	freeaddrinfo(ai0);
+
+	return errors ? -1 : 0;
 }
