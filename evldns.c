@@ -129,6 +129,14 @@ evldns_add_server_port(struct evldns_server *server, int socket)
 }
 
 void
+evldns_add_server_ports(struct evldns_server *server, const int *sockets)
+{
+	while (*sockets >= 0) {
+		(void)evldns_add_server_port(server, *sockets++);
+	}
+}
+
+void
 evldns_close_server_port(evldns_server_port *port)
 {
 	if (--port->refcnt == 0) {

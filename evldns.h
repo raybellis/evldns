@@ -96,8 +96,8 @@ void evldns_server_close(struct evldns_server_port *port);
 void evldns_add_callback(struct evldns_server *server, const char *dname, ldns_rr_class rr_class, ldns_rr_type rr_type, evldns_callback callback, void *data);
 ldns_pkt *evldns_response(const ldns_pkt *request, ldns_pkt_rcode rcode);
 
-/* not-core network function - binds to everything possible  */
-extern int evldns_add_server_all(struct evldns_server *server, const char *ipaddr, const char *port, int backlog);
+/* not-core network function - binds to a list of fds */
+void evldns_add_server_ports(struct evldns_server *, const int *sockets);
 
 /* plugin and function handling functions */
 extern void evldns_init(void);
@@ -115,6 +115,7 @@ extern int bind_to_udp4_port(int port);
 extern int bind_to_udp6_port(int port);
 extern int bind_to_tcp4_port(int port, int backlog);
 extern int bind_to_tcp6_port(int port, int backlog);
+extern int *bind_to_all(const char *addr, const char *port, int backlog);
 extern int socket_is_tcp(int fd);
 
 #ifdef __cplusplus
