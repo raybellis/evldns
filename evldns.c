@@ -459,24 +459,26 @@ evldns_server_udp_write_queue(evldns_server_request *req)
 static void
 evldns_udp_read_callback(evldns_server_port *port)
 {
-	uint8_t buffer[LDNS_MAX_PACKETLEN];
 	while (1) {
 		evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: alloc check
 		req->addrlen = sizeof(struct sockaddr_storage);
 		req->socket = port->socket;
 		req->port = port;
+		req->wire_request = malloc(LDNS_MAX_PACKETLEN);
 
-		int buflen = recvfrom(req->socket, buffer, sizeof(buffer), 0,
-				(struct sockaddr *)&req->addr, &req->addrlen);
+		ssize_t buflen = recvfrom(req->socket, req->wire_request, LDNS_MAX_PACKETLEN, 0,
+					  (struct sockaddr *)&req->addr, &req->addrlen);
 		if (buflen < 0) {
 			if (errno != EAGAIN) {
 				perror("recvfrom");
 			}
+			free(req->wire_request);
 			free(req);
 			return;
 		}
+		req->wire_reqlen = (uint16_t)buflen;
 
-		if (server_process_packet(req, buffer, buflen) >= 0) {
+		if (server_process_packet(req, req->wire_request, req->wire_reqlen) >= 0) {
 			evldns_server_udp_write_queue(req);
 		}
 	}
