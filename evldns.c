@@ -78,7 +78,7 @@ static void evldns_udp_write_callback(evldns_server_port *port);
 
 static void server_port_free(evldns_server_port *port);
 static int server_request_free(evldns_server_request *req);
-static int server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen);
+static int server_process_packet(evldns_server_request *req);
 
 /* exported function */
 struct evldns_server *evldns_add_server(struct event_base *base)
@@ -141,8 +141,9 @@ evldns_close_server_port(evldns_server_port *port)
 {
 	if (--port->refcnt == 0) {
 		server_port_free(port);
+	} else {
+		port->closing = 1;
 	}
-	port->closing = 1;
 }
 
 /*-------------------------------------------------------------------*/
@@ -152,7 +153,11 @@ evldns_tcp_accept_callback(int fd, short events, void *arg)
 {
 	struct timeval tv = { 120, 0 };
 	evldns_server_port *port = (evldns_server_port *)arg;
-	evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: error check
+	evldns_server_request *req = calloc(1, sizeof(evldns_server_request));
+	if (!req) {
+		perror("calloc");
+		return;
+	}
 
 	req->port = port;
 	req->addrlen = sizeof(struct sockaddr_storage);
@@ -369,7 +374,7 @@ evldns_tcp_read_callback(int fd, short events, void *arg)
 		if (r < 0) {
 			evldns_tcp_cleanup(req);
 		} else if (r == 1) {
-			if (server_process_packet(req, req->wire_request, req->wire_reqlen) >= 0) {
+			if (server_process_packet(req) >= 0) {
 				evldns_tcp_write_queue(req);
 			}
 		}
@@ -460,11 +465,22 @@ static void
 evldns_udp_read_callback(evldns_server_port *port)
 {
 	while (1) {
-		evldns_server_request *req = calloc(1, sizeof(evldns_server_request)); // TODO: alloc check
+		evldns_server_request *req = calloc(1, sizeof(evldns_server_request));
+		if (!req) {
+			perror("calloc");
+			return;
+		}
+
+		req->wire_request = malloc(LDNS_MAX_PACKETLEN);
+		if (!req->wire_request) {
+			free(req);
+			perror("malloc");
+			return;
+		}
+
 		req->addrlen = sizeof(struct sockaddr_storage);
 		req->socket = port->socket;
 		req->port = port;
-		req->wire_request = malloc(LDNS_MAX_PACKETLEN);
 
 		ssize_t buflen = recvfrom(req->socket, req->wire_request, LDNS_MAX_PACKETLEN, 0,
 					  (struct sockaddr *)&req->addr, &req->addrlen);
@@ -478,7 +494,7 @@ evldns_udp_read_callback(evldns_server_port *port)
 		}
 		req->wire_reqlen = (uint16_t)buflen;
 
-		if (server_process_packet(req, req->wire_request, req->wire_reqlen) >= 0) {
+		if (server_process_packet(req) >= 0) {
 			evldns_server_udp_write_queue(req);
 		}
 	}
@@ -542,7 +558,6 @@ evldns_response(const ldns_pkt *req, ldns_pkt_rcode rcode)
 static void
 server_port_free(evldns_server_port *port)
 {
-	// TODO
 	free(port);
 }
 
@@ -559,7 +574,7 @@ server_request_free(evldns_server_request *req)
 	free(req->event);
 	free(req);
 
-	// TODO: free port structure on refcnt == 0?
+	// TODO?: perhaps free port structure on refcnt == 0?
 
 	return 0;
 }
@@ -567,7 +582,11 @@ server_request_free(evldns_server_request *req)
 void evldns_add_callback(evldns_server *server, const char *dname, ldns_rr_class rr_class, ldns_rr_type rr_type, evldns_callback callback, void *data)
 {
 	evldns_cb *cb = (evldns_cb *)calloc(1, sizeof(evldns_cb));
-	// TODO: error check
+	if (!cb) {
+		perror("calloc");
+		return;
+	}
+
 	if (dname != NULL) {
 		cb->rdf = ldns_dname_new_frm_str(dname);
 		ldns_dname2canonical(cb->rdf);
@@ -621,8 +640,11 @@ dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req)
 }
 
 static int
-server_process_packet(evldns_server_request *req, uint8_t *buffer, size_t buflen)
+server_process_packet(evldns_server_request *req)
 {
+	uint8_t *buffer = req->wire_request;
+	size_t buflen = req->wire_reqlen;
+
 	req->port->refcnt++;
 
 	/*
