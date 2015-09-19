@@ -376,6 +376,8 @@ evldns_tcp_read_callback(int fd, short events, void *arg)
 		} else if (r == 1) {
 			if (server_process_packet(req) >= 0) {
 				evldns_tcp_write_queue(req);
+			} else {
+				evldns_tcp_cleanup(req);
 			}
 		}
 	}
@@ -673,6 +675,13 @@ server_process_packet(evldns_server_request *req)
 	 * send it to the callback chain
 	 */
 	dispatch_callbacks(&req->port->server->callbacks, req);
+
+	/*
+	 * drop the request if the callback chain didn't want to answer it
+	 */
+	if (!req->response) {
+		return -1;
+	}
 
 	/*
 	 * if the callbacks didn't generate a wire-format response
