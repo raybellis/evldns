@@ -677,6 +677,13 @@ server_process_packet(evldns_server_request *req)
 	dispatch_callbacks(&req->port->server->callbacks, req);
 
 	/*
+	 * drop the request if the callback chain didn't want to answer it
+	 */
+	if (!req->response) {
+		return -1;
+	}
+
+	/*
 	 * if the callbacks didn't generate a wire-format response
 	 * then do the necessary stuff here
 	 */
