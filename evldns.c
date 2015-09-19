@@ -376,6 +376,8 @@ evldns_tcp_read_callback(int fd, short events, void *arg)
 		} else if (r == 1) {
 			if (server_process_packet(req) >= 0) {
 				evldns_tcp_write_queue(req);
+			} else {
+				evldns_tcp_cleanup(req);
 			}
 		}
 	}
