@@ -374,8 +374,14 @@ evldns_tcp_read_callback(int fd, short events, void *arg)
 		if (r < 0) {
 			evldns_tcp_cleanup(req);
 		} else if (r == 1) {
-			if (server_process_packet(req) >= 0) {
+			int ret = server_process_packet(req);
+			if (ret >= 0) {
 				evldns_tcp_write_queue(req);
+			} else if (ret == -2) {
+				/*
+				 * a callback requested blackholing the request
+				 */
+				evldns_tcp_cleanup(req);
 			}
 		}
 	}
@@ -631,7 +637,7 @@ dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req)
 
 		(*cb->callback)(req, cb->data, qname, qtype, qclass);
 
-		if (req->response || req->wire_response) {
+		if (req->response || req->wire_response || req->blackhole) {
 			break;
 		}
 	}
@@ -673,6 +679,14 @@ server_process_packet(evldns_server_request *req)
 	 * send it to the callback chain
 	 */
 	dispatch_callbacks(&req->port->server->callbacks, req);
+
+	/*
+	 * blackhole the request if the callback chain didn't want to answer it
+	 */
+	if (req->blackhole) {
+		req->blackhole = 0;
+		return -2;
+	}
 
 	/*
 	 * if the callbacks didn't generate a wire-format response
