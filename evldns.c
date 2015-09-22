@@ -502,6 +502,8 @@ evldns_udp_read_callback(evldns_server_port *port)
 
 		if (server_process_packet(req) >= 0) {
 			evldns_server_udp_write_queue(req);
+		} else {
+			server_request_free(req);
 		}
 	}
 }
