@@ -550,13 +550,20 @@ evldns_response(const ldns_pkt *req, ldns_pkt_rcode rcode)
 	ldns_pkt_set_id(p, ldns_pkt_id(req));		/* copy ID field */
 	ldns_pkt_set_cd(p, ldns_pkt_cd(req));		/* copy CD bit */
 	ldns_pkt_set_rd(p, ldns_pkt_rd(req));		/* copy RD bit */
-	ldns_pkt_set_qr(p, true);			/* this is a response */
+	ldns_pkt_set_qr(p, 1);						/* this is a response */
 	ldns_pkt_set_opcode(p, LDNS_PACKET_QUERY);	/* to a query */
-	ldns_pkt_set_rcode(p, rcode);			/* with this rcode */
+	ldns_pkt_set_rcode(p, rcode);				/* with this rcode */
 
 	ldns_rr_list_deep_free(p->_question);
 	ldns_pkt_set_question(p, q);
 	ldns_pkt_set_qdcount(p, ldns_rr_list_rr_count(q));
+
+	if (ldns_pkt_edns(req)) {
+		ldns_pkt_set_edns_udp_size(p, 4096);
+		if (ldns_pkt_edns_do(req)) {
+			ldns_pkt_set_edns_do(p, 1);
+		}
+	}
 
 	return p;
 }
