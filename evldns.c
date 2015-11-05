@@ -619,39 +619,41 @@ dispatch_callbacks(struct evldnscbq *callbacks, evldns_server_request *req)
 	evldns_cb *cb;
 	ldns_pkt *pkt = req->request;
 	ldns_rr *q = ldns_rr_list_rr(ldns_pkt_question(pkt), 0);
-	ldns_rdf *qname = ldns_dname_clone_from(ldns_rr_owner(q), 0);
-	ldns_dname2canonical(qname);
-	ldns_rr_type qtype = ldns_rr_get_type(q);
-	ldns_rr_class qclass = ldns_rr_get_class(q);
+	if (q) {
+		ldns_rr_type qtype = ldns_rr_get_type(q);
+		ldns_rr_class qclass = ldns_rr_get_class(q);
+		ldns_rdf *qname = ldns_dname_clone_from(ldns_rr_owner(q), 0);
+		ldns_dname2canonical(qname);
 
-	TAILQ_FOREACH(cb, callbacks, next) {
-		if ((cb->rr_class != LDNS_RR_CLASS_ANY) &&
-		    (cb->rr_class != ldns_rr_get_class(q)))
-		{
-			continue;
-		}
-
-		/* TODO: dispatch if request QTYPE == ANY? */
-		if ((cb->rr_type != LDNS_RR_TYPE_ANY) &&
-		    (cb->rr_type != ldns_rr_get_type(q)))
-		{
-			continue;
-		}
-
-		if (cb->rdf) {
-			if (!ldns_dname_match_wildcard(qname, cb->rdf)) {
+		TAILQ_FOREACH(cb, callbacks, next) {
+			if ((cb->rr_class != LDNS_RR_CLASS_ANY) &&
+		    	(cb->rr_class != ldns_rr_get_class(q)))
+			{
 				continue;
+			}
+
+			/* TODO: dispatch if request QTYPE == ANY? */
+			if ((cb->rr_type != LDNS_RR_TYPE_ANY) &&
+		    	(cb->rr_type != ldns_rr_get_type(q)))
+			{
+				continue;
+			}
+
+			if (cb->rdf) {
+				if (!ldns_dname_match_wildcard(qname, cb->rdf)) {
+					continue;
+				}
+			}
+
+			(*cb->callback)(req, cb->data, qname, qtype, qclass);
+
+			if (req->response || req->wire_response || req->blackhole) {
+				break;
 			}
 		}
 
-		(*cb->callback)(req, cb->data, qname, qtype, qclass);
-
-		if (req->response || req->wire_response || req->blackhole) {
-			break;
-		}
+		ldns_rdf_deep_free(qname);
 	}
-
-	ldns_rdf_deep_free(qname);
 }
 
 static int
