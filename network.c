@@ -177,7 +177,7 @@ int bind_to_tcp6_port(int port, int backlog)
 
 /*--------------------------------------------------------------------*/
 
-int *bind_to_all(const char *ipaddr, const char *port, int backlog)
+int *bind_to_all(const char *ipaddr, num_ip, const char *port, int backlog)
 {
 	struct sockaddr_storage	addr;
 	struct addrinfo			hints, *ai, *ai0;
@@ -186,41 +186,46 @@ int *bind_to_all(const char *ipaddr, const char *port, int backlog)
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_flags = AI_ADDRCONFIG | AI_PASSIVE;
-
-	int res = getaddrinfo(ipaddr, port, &hints, &ai);
-	if (res) {
-		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
-		return NULL;
-	}
-	ai0 = ai;
-
-	/* count the addrinfo objects */
+  
 	int count = 0;
-	while (ai) {
-		++count;
-		ai = ai->ai_next;
-	}
+  
+  for (i=0; i < num_ip; i++) {
+  	int res = getaddrinfo(ipaddr[i], port, &hints, &ai);
+  	if (res) {
+  		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+  		return NULL;
+  	}
+  	ai0[i] = ai;
+
+  	/* count the addrinfo objects */
+  	while (ai) {
+  		++count; // for each object derived from each ipaddr[] element
+  		ai = ai->ai_next;
+  	}    
+  }
 
 	/* make some memory for FDs */
 	result = (int *)calloc(count + 1, sizeof(int));
-
 	int current = 0;
-	for (ai = ai0 ; ai; ai = ai->ai_next) {
-		if (ai->ai_socktype != SOCK_DGRAM && ai->ai_socktype != SOCK_STREAM) continue;
+  
+  for (i=0; i < num_ip; i++) {
+  	for (ai = ai0[i] ; ai; ai = ai->ai_next) {
+  		if (ai->ai_socktype != SOCK_DGRAM && ai->ai_socktype != SOCK_STREAM) continue;
 
-		int addrlen = ai->ai_addrlen;
-		memset(&addr, 0, sizeof(addr));
-		memcpy(&addr, ai->ai_addr, addrlen);
+  		int addrlen = ai->ai_addrlen;
+  		memset(&addr, 0, sizeof(addr));
+  		memcpy(&addr, ai->ai_addr, addrlen);
 
-		int fd = bind_to_sockaddr((struct sockaddr *)&addr, addrlen, ai->ai_socktype, backlog);
-		if (fd >= 0) {
-			result[current++] = fd;
-		}
-	}
+  		int fd = bind_to_sockaddr((struct sockaddr *)&addr, addrlen, ai->ai_socktype, backlog);
+  		if (fd >= 0) {
+  			result[current++] = fd;
+  		}
+  	}
 
-	/* clean up and terminate */
-	freeaddrinfo(ai0);
-	result[current++] = -1;
+  	/* clean up and terminate */
+  	freeaddrinfo(ai0);
+  	result[current++] = -1;    
+  }
 
 	return result;
 }
