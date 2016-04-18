@@ -233,6 +233,7 @@ int *bind_to_all(const char **ipaddr, int num_ip, const char *port, int backlog)
 					} else {
 						syslog(LOG_INFO,"Binding to IPv6: %s, File descriptor:%d \n", buffer, fd);
 					}
+				}
 				result[current++] = fd;
 			}
 		}
