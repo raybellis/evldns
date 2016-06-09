@@ -17,4 +17,6 @@ $ autoreconf --install
 then:
 
 $ ./configure --with-ldns=<path-to-ldns> --with-libevent=<path-to-libevent>
+# Mac OS X with libraries installed with brew:
+# LDFLAGS=-L/usr/local/opt/openssl/lib CPPFLAGS=-I/usr/local/opt/openssl/include ./configure --with-ldns=/usr/local --with-libevent=/usr/local
 $ make

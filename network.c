@@ -39,6 +39,7 @@
 #include <netinet/in.h>
 #include <syslog.h>
 #include <evldns.h>
+#include <syslog.h>
 
 /*--------------------------------------------------------------------*/
 
@@ -186,51 +187,70 @@ int bind_to_tcp6_port(int port, int backlog)
 
 /*--------------------------------------------------------------------*/
 
-int *bind_to_all(const char *ipaddr, const char *port, int backlog)
+int *bind_to_all(const char **ipaddr, int num_ip, const char *port, int backlog)
 {
 	struct sockaddr_storage	addr;
-	struct addrinfo			hints, *ai, *ai0;
+	struct addrinfo			hints, *ai;
+	struct addrinfo *ai0[10]={0,};
 	int						*result = 0;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_flags = AI_ADDRCONFIG | AI_PASSIVE;
 
-	int res = getaddrinfo(ipaddr, port, &hints, &ai);
-	if (res) {
-		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
-		return NULL;
-	}
-	ai0 = ai;
-
-	/* count the addrinfo objects */
 	int count = 0;
-	while (ai) {
-		++count;
-		ai = ai->ai_next;
+	int i;
+	for (i=0; i < num_ip; i++) {
+		int res = getaddrinfo(ipaddr[i], port, &hints, &ai);
+		if (res) {
+			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+			return NULL;
+		}
+		ai0[i] = ai;
+
+		/* count the addrinfo objects */
+		while (ai) {
+			++count; // for each object derived from each ipaddr[] element
+			ai = ai->ai_next;
+		}    
 	}
 
 	/* make some memory for FDs */
 	result = (int *)calloc(count + 1, sizeof(int));
-
 	int current = 0;
-	for (ai = ai0 ; ai; ai = ai->ai_next) {
-		if (ai->ai_socktype != SOCK_DGRAM && ai->ai_socktype != SOCK_STREAM) continue;
+  
+	for (i=0; i < num_ip; i++) {
+		for (ai = ai0[i] ; ai; ai = ai->ai_next) {
+			if (ai->ai_socktype != SOCK_DGRAM && ai->ai_socktype != SOCK_STREAM) continue;
 
-		int addrlen = ai->ai_addrlen;
-		memset(&addr, 0, sizeof(addr));
-		memcpy(&addr, ai->ai_addr, addrlen);
+			int addrlen = ai->ai_addrlen;
+			memset(&addr, 0, sizeof(addr));
+			memcpy(&addr, ai->ai_addr, addrlen);
 
-		int fd = bind_to_sockaddr((struct sockaddr *)&addr, addrlen, ai->ai_socktype, backlog);
-		if (fd >= 0) {
-			result[current++] = fd;
+			int fd = bind_to_sockaddr((struct sockaddr *)&addr, addrlen, ai->ai_socktype, backlog);
+			if (fd >= 0) {
+				if (addr.ss_family == AF_INET) {
+					struct sockaddr_in *sin = (struct sockaddr_in *)&addr;
+					unsigned char *ip = (unsigned char *)&sin->sin_addr.s_addr;
+					syslog(LOG_INFO,"Binding to IPv4: %d.%d.%d.%d, File descriptor:%d \n", ip[0], ip[1], ip[2], ip[3], fd);
+				} else if (addr.ss_family == AF_INET6) {
+					char buffer[INET6_ADDRSTRLEN];
+					int err=getnameinfo((struct sockaddr*)&addr,addrlen,buffer,sizeof(buffer),0,0,NI_NUMERICHOST);
+					if (err!=0) {
+						syslog(LOG_INFO, "Failed to convert address to string (errno=%d)",errno);
+						exit(1);
+					} else {
+						syslog(LOG_INFO,"Binding to IPv6: %s, File descriptor:%d \n", buffer, fd);
+					}
+				}
+				result[current++] = fd;
+			}
 		}
+
+		/* clean up and terminate */
+		freeaddrinfo(ai0[i]);
 	}
-
-	/* clean up and terminate */
-	freeaddrinfo(ai0);
-	result[current++] = -1;
-
+	result[current] = -1;
 	return result;
 }
 
