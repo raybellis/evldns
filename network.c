@@ -55,13 +55,15 @@ int bind_to_sockaddr(struct sockaddr* addr, socklen_t addrlen, int type, int bac
 		return s;
 	}
 
-	/* disable automatic 6to4 if necessary */
+	/* disable automatic IPv4 mapped dual-stack */
+#ifdef IPV6_V6ONLY
 	if (addr->sa_family == AF_INET6) {
 		int v6only = 1;
 		if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only))) {
 			perror("setsockopt(IPV6_ONLY)");
 		}
 	}
+#endif
 
 	/* allow socket re-use */
 	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) {
