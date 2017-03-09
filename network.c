@@ -37,6 +37,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <syslog.h>
 #include <evldns.h>
 
 /*--------------------------------------------------------------------*/
@@ -45,6 +46,7 @@ int bind_to_sockaddr(struct sockaddr* addr, socklen_t addrlen, int type, int bac
 {
 	int					 r, s;
 	int					 reuse = 1;
+	char				 nbuf[NI_MAXHOST];
 
 	/* make the actual socket */
 	s = socket(addr->sa_family, type, 0);
@@ -53,13 +55,15 @@ int bind_to_sockaddr(struct sockaddr* addr, socklen_t addrlen, int type, int bac
 		return s;
 	}
 
-	/* disable automatic 6to4 if necessary */
+	/* disable automatic IPv4 mapped dual-stack */
+#ifdef IPV6_V6ONLY
 	if (addr->sa_family == AF_INET6) {
 		int v6only = 1;
 		if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only))) {
 			perror("setsockopt(IPV6_ONLY)");
 		}
 	}
+#endif
 
 	/* allow socket re-use */
 	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) {
@@ -87,6 +91,13 @@ int bind_to_sockaddr(struct sockaddr* addr, socklen_t addrlen, int type, int bac
 		perror("fcntl");
 	}
 
+	/* log the result of the 'bind' call (non-fatal) */
+	if ((r = getnameinfo(addr, addrlen, nbuf, sizeof(nbuf), NULL, 0, NI_NUMERICHOST)) == 0) {
+		syslog(LOG_INFO, "bound %s fd#%d to %s", (type == SOCK_STREAM) ? "TCP" : "UDP", s, nbuf);
+	} else {
+		fprintf(stderr, "getnameinfo: %s\n",  gai_strerror(r));
+	}
+
 	return s;
 }
 
@@ -110,7 +121,7 @@ int bind_to_port(int port, int family, int type, int backlog)
 		addr.sin6_port = htons(port);
 		return bind_to_sockaddr((struct sockaddr *)&addr, sizeof(addr), type, backlog);
 	} else {
-		fprintf(stderr, "address family not recognized\n");
+		fprintf(stderr, "address family %d not recognized\n", family);
 		return -1;
 	}
 }
