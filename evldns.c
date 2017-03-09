@@ -546,13 +546,18 @@ evldns_response(const ldns_pkt *req, ldns_pkt_rcode rcode)
 {
 	ldns_pkt *p = ldns_pkt_new();
 	ldns_rr_list *q = ldns_rr_list_clone(ldns_pkt_question(req));
+	ldns_pkt_opcode opcode = ldns_pkt_get_opcode(req);
 
 	ldns_pkt_set_id(p, ldns_pkt_id(req));		/* copy ID field */
-	ldns_pkt_set_cd(p, ldns_pkt_cd(req));		/* copy CD bit */
-	ldns_pkt_set_rd(p, ldns_pkt_rd(req));		/* copy RD bit */
+
+	if (opcode == LDNS_PACKET_QUERY) {
+		ldns_pkt_set_cd(p, ldns_pkt_cd(req));	/* copy CD bit */
+		ldns_pkt_set_rd(p, ldns_pkt_rd(req));	/* copy RD bit */
+	}
+
 	ldns_pkt_set_qr(p, 1);						/* this is a response */
-	ldns_pkt_set_opcode(p, LDNS_PACKET_QUERY);	/* to a query */
-	ldns_pkt_set_rcode(p, rcode);				/* with this rcode */
+	ldns_pkt_set_opcode(p, opcode);				/* copy opcode */
+	ldns_pkt_set_rcode(p, rcode);				/* set rcode */
 
 	ldns_rr_list_deep_free(p->_question);
 	ldns_pkt_set_question(p, q);
