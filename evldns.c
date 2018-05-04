@@ -52,8 +52,8 @@ struct evldns_server_port {
 	int								 refcnt;
 	struct event					*event;
 	TAILQ_HEAD(evldnssrq, evldns_server_request) pending;
-	int								 is_tcp:1;
-	int								 closing:1;
+	unsigned int					 is_tcp:1;
+	unsigned int					 closing:1;
 };
 typedef struct evldns_server_port evldns_server_port;
 
